@@ -1,0 +1,23 @@
+{
+  "name": "comapeo-config-builder-api",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "start": "bun run index.ts",
+    "dev": "bun --watch .",
+    "lint": "biome lint ."
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "biome": "^0.3.3"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@types/adm-zip": "^0.5.5",
+    "adm-zip": "^0.5.16",
+    "elysia": "^1.1.22",
+    "mapeo-settings-builder": "^6.0.0"
+  }
+}
