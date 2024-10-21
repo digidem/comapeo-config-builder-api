@@ -1,11 +1,12 @@
 import { Elysia, t } from 'elysia';
+import { cors } from "@elysiajs/cors";
 import AdmZip from 'adm-zip';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-const PORT = process.env.PORT || 3000;
+const port = process.env.PORT ?? 3000;
 const execAsync = promisify(exec);
 
 function runShellCommand(command: string) {
@@ -23,7 +24,7 @@ function runShellCommand(command: string) {
   });
 }
 
-const app = new Elysia()
+const app = new Elysia().use(cors())
 
 app
   .post('/', async ({ body }: { body: { file: File } }) => {
@@ -107,9 +108,10 @@ app
       });
     }
   })
-  .listen(PORT)
+  .listen(port)
 console.log(
-  `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
+  `🦊 Elysia is running at http://${app.server?.hostname}:${app.server?.port}`
 );
 
-export default app;
+export { app };
+export type App = typeof app;
