@@ -44,17 +44,7 @@ app
       const zip = new AdmZip(Buffer.from(zipBuffer));
       zip.extractAllTo(tmpDir, true);
 
-      // Find the config directory within the extracted zip
-      const configDir = (await fs.readdir(tmpDir)).find(async file => {
-        const stats = await fs.stat(path.join(tmpDir, file));
-        return stats.isDirectory();
-      });
-
-      if (!configDir) {
-        throw new Error('No configuration directory found in the uploaded ZIP file');
-      }
-
-      const fullConfigPath = path.join(tmpDir, configDir);
+      const fullConfigPath = tmpDir;
       const buildDir = path.join(fullConfigPath, 'build');
       const metadata = JSON.parse(await fs.readFile(path.join(fullConfigPath, 'metadata.json'), 'utf-8'));
       const buildFileName = `${metadata.name}-${metadata.version}.comapeocat`;
