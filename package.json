@@ -12,13 +12,13 @@
     "biome": "^0.3.3"
   },
   "peerDependencies": {
-    "typescript": "^5.0.0"
+    "typescript": "^5.6.3"
   },
   "dependencies": {
-    "@elysiajs/cors": "^1.1.1",
-    "@types/adm-zip": "^0.5.5",
+    "@elysiajs/cors": "^1.2.0",
+    "@types/adm-zip": "^0.5.7",
     "adm-zip": "^0.5.16",
-    "elysia": "^1.1.22",
+    "elysia": "^1.2.10",
     "mapeo-settings-builder": "^6.0.0"
   }
 }
