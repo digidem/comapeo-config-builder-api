@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -yq gconf-service libasound2 libatk1.0-0 l
   libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 \
   ca-certificates fonts-liberation libnss3 lsb-release xdg-utils wget bzip2
 
-RUN npm install -g bun
+RUN npm install -g bun@1.0.16
 RUN npm install -g mapeo-settings-builder
 # Set the working directory in the container
 WORKDIR /app
