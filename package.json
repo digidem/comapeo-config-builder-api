@@ -7,9 +7,9 @@
     "dev": "bun --watch src/index.ts",
     "build": "bun build src/index.ts --outdir ./dist --target node",
     "lint": "biome lint .",
-    "test": "bun test src/tests",
-    "test:unit": "bun test src/tests/unit",
-    "test:integration": "bun test src/tests/integration",
+    "test": "BUN_ENV=test bun test src/tests",
+    "test:unit": "BUN_ENV=test bun test src/tests/unit",
+    "test:integration": "BUN_ENV=test bun test src/tests/integration",
     "audit": "npm audit --production"
   },
   "devDependencies": {

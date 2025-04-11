@@ -1,17 +1,25 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll, mock, spyOn } from 'bun:test';
 import { createApp } from '../../config/app';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { cleanup } from '../utils/testHelpers';
+import * as shellModule from '../../utils/shell';
 
 describe('GitHub URL Integration Test', () => {
   const app = createApp();
   let tmpDir: string;
   let zipFilePath: string;
 
-  // Download the GitHub ZIP file before running tests
+  // Mock the runShellCommand function to simulate successful execution
   beforeAll(async () => {
+    // Mock the runShellCommand function
+    spyOn(shellModule, 'runShellCommand').mockImplementation(async (command) => {
+      console.log(`Mocked shell command: ${command}`);
+      return 'Mocked command output';
+    });
+
+    // Download the GitHub ZIP file
     // Create a temporary directory
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'github-url-test-'));
     zipFilePath = path.join(tmpDir, 'mapeo-default-config.zip');

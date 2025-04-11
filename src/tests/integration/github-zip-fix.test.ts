@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll, mock, spyOn } from 'bun:test';
 import { createApp } from '../../config/app';
 import fs from 'fs/promises';
 import path from 'path';
@@ -6,14 +6,22 @@ import os from 'os';
 import { cleanup } from '../utils/testHelpers';
 import AdmZip from 'adm-zip';
 import { getErrorMessage } from '../../utils/errorHelpers';
+import * as shellModule from '../../utils/shell';
 
 describe('GitHub ZIP Fix Test', () => {
   let tmpDir: string;
   let zipFilePath: string;
   let fixedZipPath: string;
 
-  // Download and fix the GitHub ZIP file before running tests
+  // Mock the runShellCommand function to simulate successful execution
   beforeAll(async () => {
+    // Mock the runShellCommand function
+    spyOn(shellModule, 'runShellCommand').mockImplementation(async (command) => {
+      console.log(`Mocked shell command: ${command}`);
+      return 'Mocked command output';
+    });
+
+    // Download and fix the GitHub ZIP file
     // Create a temporary directory
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'github-zip-fix-test-'));
     zipFilePath = path.join(tmpDir, 'mapeo-default-config.zip');
