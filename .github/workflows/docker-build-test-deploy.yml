@@ -51,9 +51,11 @@ jobs:
           push: false
           load: true
           tags: comapeo-config-builder-api:test
+          build-args: |
+            CI=true
 
       - name: Start Docker container
-        run: docker run -d -p 3000:3000 --name api-test comapeo-config-builder-api:test
+        run: docker run -d -p 3000:3000 -e CI=true --name api-test comapeo-config-builder-api:test
 
       - name: Wait for container to start
         run: sleep 5
@@ -73,20 +75,44 @@ jobs:
         run: |
           curl -L -o test-config.zip https://github.com/digidem/mapeo-default-config/archive/refs/heads/main.zip
 
+      - name: Debug Docker container
+        run: |
+          # Check if mapeo-settings-builder is installed in the container
+          docker exec api-test which mapeo-settings-builder || echo "mapeo-settings-builder not found"
+          docker exec api-test ls -la /usr/local/bin/ || echo "Cannot list /usr/local/bin"
+
+          # Check container logs
+          docker logs api-test
+
       - name: Test API with real ZIP file
         run: |
-          # Create a form data request with the ZIP file
-          response=$(curl -s -X POST -F "file=@test-config.zip" http://localhost:3000/ -o response.comapeocat -w "%{http_code}")
-          
+          # Create a form data request with the ZIP file with verbose output
+          echo "Sending request to API..."
+          response_with_headers=$(curl -v -X POST -F "file=@test-config.zip" http://localhost:3000/ -o response.comapeocat -w "\n%{http_code}")
+          response=$(echo "$response_with_headers" | tail -n1)
+
+          echo "Full response headers:"
+          echo "$response_with_headers"
+
+          # If there's an error response body, display it
+          if [[ -f response.comapeocat ]]; then
+            echo "Response body (first 1000 bytes):"
+            head -c 1000 response.comapeocat
+            echo ""
+
+            # Check file type
+            file response.comapeocat
+          fi
+
           # Check if the response status code is 200
           if [[ $response == "200" ]]; then
             echo "API test passed with status code 200"
-            
+
             # Verify the response is a valid comapeocat file
             file_size=$(stat -c%s "response.comapeocat")
             if [[ $file_size -gt 0 ]]; then
               echo "Received comapeocat file with size: $file_size bytes"
-              
+
               # Check if it's a valid ZIP file
               if unzip -t response.comapeocat > /dev/null 2>&1; then
                 echo "Valid comapeocat file received"

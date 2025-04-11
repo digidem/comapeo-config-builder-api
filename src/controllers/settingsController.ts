@@ -44,7 +44,13 @@ export const settingsController = (app: Elysia) => {
       set.headers['Content-Type'] = 'application/octet-stream';
 
       // Return the built settings file
-      console.log(`[${requestId}] Returning file: ${result.filePath}`);
+      console.log(`[${requestId}] Returning file: ${result.filePath || 'undefined'}`);
+
+      // Check if filePath is defined
+      if (!result.filePath) {
+        console.error(`[${requestId}] Error: filePath is undefined in result`);
+        throw new Error('Failed to build settings: filePath is undefined');
+      }
 
       // Verify the file exists
       try {
