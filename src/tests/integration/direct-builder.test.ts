@@ -5,6 +5,7 @@ import os from 'os';
 import { cleanup } from '../utils/testHelpers';
 import { runShellCommand } from '../../utils/shell';
 import AdmZip from 'adm-zip';
+import { getErrorMessage } from '../../utils/errorHelpers';
 
 describe('Direct Builder Test', () => {
   let tmpDir: string;
@@ -29,11 +30,11 @@ describe('Direct Builder Test', () => {
     // Download the ZIP file from GitHub
     console.log('Downloading ZIP file from GitHub...');
     const response = await fetch('https://github.com/digidem/mapeo-default-config/archive/refs/heads/main.zip');
-    
+
     if (!response.ok) {
       throw new Error(`Failed to download ZIP file: ${response.status} ${response.statusText}`);
     }
-    
+
     const zipBuffer = await response.arrayBuffer();
     await fs.writeFile(zipFilePath, new Uint8Array(zipBuffer));
     console.log(`ZIP file downloaded to ${zipFilePath}`);
@@ -93,21 +94,21 @@ describe('Direct Builder Test', () => {
       // Try to open the file as a ZIP (comapeocat files are ZIP files)
       const zip = new AdmZip(outputFilePath);
       const entries = zip.getEntries();
-      
+
       // Log the entries in the ZIP file
       console.log(`Comapeocat file contains ${entries.length} entries:`);
       for (const entry of entries.slice(0, 10)) { // Show only first 10 entries to avoid too much output
         console.log(`- ${entry.entryName} (${entry.header.size} bytes)`);
       }
-      
+
       if (entries.length > 10) {
         console.log(`... and ${entries.length - 10} more entries`);
       }
-      
+
       // Check if the ZIP file has entries
       expect(entries.length).toBeGreaterThan(0);
     } catch (error) {
-      console.error(`Error running mapeo-settings-builder: ${error.message}`);
+      console.error(`Error running mapeo-settings-builder: ${getErrorMessage(error)}`);
       throw error;
     }
   }, 30000); // Increase timeout to 30 seconds for this test

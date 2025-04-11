@@ -4,6 +4,7 @@ import path from 'path';
 import os from 'os';
 import { ValidationError, ProcessingError } from '../types/errors';
 import { runShellCommand } from '../utils/shell';
+import { getErrorMessage } from '../utils/errorHelpers';
 
 export interface SettingsMetadata {
   name: string;
@@ -92,7 +93,7 @@ export class SettingsBuilderService {
         }
       } catch (error) {
         console.error(`[${requestId}] Error extracting ZIP file:`, error);
-        throw new ValidationError(`Failed to extract ZIP file: ${(error as Error).message}`);
+        throw new ValidationError(`Failed to extract ZIP file: ${getErrorMessage(error)}`);
       }
 
       // Validate the extracted content
@@ -131,7 +132,7 @@ export class SettingsBuilderService {
         console.log(`[${requestId}] Updated metadata.json with name: ${metadata.name}, version: ${metadata.version}`);
       } catch (error) {
         if (error instanceof ValidationError) throw error;
-        throw new ValidationError(`Failed to parse metadata.json: ${(error as Error).message}`);
+        throw new ValidationError(`Failed to parse metadata.json: ${getErrorMessage(error)}`);
       }
 
       const buildFileName = `${metadata.name}-${metadata.version}.comapeocat`;
@@ -146,7 +147,7 @@ export class SettingsBuilderService {
         // Execute the command and wait for it to complete
         await runShellCommand(`mapeo-settings-builder build ${fullConfigPath} -o ${buildPath}`, 120000);
       } catch (error) {
-        throw new ProcessingError(`Failed to build settings: ${(error as Error).message}`);
+        throw new ProcessingError(`Failed to build settings: ${getErrorMessage(error)}`);
       }
 
       // Verify the file exists
@@ -170,7 +171,7 @@ export class SettingsBuilderService {
       } catch (error) {
         console.error(`[${requestId}] Error verifying file:`, error);
         if (error instanceof ProcessingError) throw error;
-        throw new ProcessingError(`Build file not found: ${(error as Error).message}`);
+        throw new ProcessingError(`Build file not found: ${getErrorMessage(error)}`);
       }
 
       console.log(`[${requestId}] .comapeocat file created: ${buildPath}`);

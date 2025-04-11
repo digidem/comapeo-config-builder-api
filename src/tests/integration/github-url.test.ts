@@ -19,13 +19,13 @@ describe('GitHub URL Integration Test', () => {
     // Download the ZIP file from GitHub
     console.log('Downloading ZIP file from GitHub...');
     const response = await fetch('https://github.com/digidem/mapeo-default-config/archive/refs/heads/main.zip');
-    
+
     if (!response.ok) {
       throw new Error(`Failed to download ZIP file: ${response.status} ${response.statusText}`);
     }
-    
+
     const zipBuffer = await response.arrayBuffer();
-    await fs.writeFile(zipFilePath, Buffer.from(zipBuffer));
+    await fs.writeFile(zipFilePath, new Uint8Array(zipBuffer));
     console.log(`ZIP file downloaded to ${zipFilePath}`);
   });
 
@@ -37,16 +37,16 @@ describe('GitHub URL Integration Test', () => {
   it('should process a GitHub ZIP file and return a response', async () => {
     // Read the ZIP file
     const zipFile = await fs.readFile(zipFilePath);
-    
+
     // Create a File object from the ZIP file
-    const file = new File([zipFile], 'mapeo-default-config.zip', { 
-      type: 'application/zip' 
+    const file = new File([zipFile], 'mapeo-default-config.zip', {
+      type: 'application/zip'
     });
-    
+
     // Create a FormData object with the file
     const formData = new FormData();
     formData.append('file', file);
-    
+
     // Send the request to the API
     const response = await app.handle(
       new Request('http://localhost/', {
@@ -54,14 +54,14 @@ describe('GitHub URL Integration Test', () => {
         body: formData
       })
     );
-    
+
     // The API is handling the request
     expect(response.status).toBe(200);
-    
+
     // Check that we got a response
     const responseBuffer = await response.arrayBuffer();
     expect(responseBuffer).toBeDefined();
-    
+
     console.log(`Received response with size: ${responseBuffer.byteLength} bytes`);
   }, 30000); // Increase timeout to 30 seconds for this test
 });

@@ -1,4 +1,5 @@
 import { exec } from 'child_process';
+import { getErrorMessage } from './errorHelpers';
 
 /**
  * Execute a shell command with proper error handling and timeout
@@ -19,7 +20,7 @@ export function runShellCommand(command: string, timeoutMs = 60000): Promise<str
       }
       resolve(stdout);
     });
-    
+
     // Set timeout to kill the process if it takes too long
     const timeout = setTimeout(() => {
       if (process.pid) {
@@ -28,11 +29,11 @@ export function runShellCommand(command: string, timeoutMs = 60000): Promise<str
           process.kill();
           reject(new Error(`Command timed out after ${timeoutMs}ms: ${command}`));
         } catch (err) {
-          console.error('Error killing process:', err);
+          console.error(`Error killing process: ${getErrorMessage(err)}`);
         }
       }
     }, timeoutMs);
-    
+
     // Clear timeout when process exits
     process.on('exit', () => clearTimeout(timeout));
   });

@@ -2,6 +2,7 @@ import { Elysia } from 'elysia';
 import { ValidationError } from '../types/errors';
 import { SettingsBuilderService } from '../services/settingsBuilder';
 import fs from 'fs/promises';
+import { getErrorMessage } from '../utils/errorHelpers';
 
 /**
  * Settings controller for handling settings file uploads and building
@@ -66,7 +67,7 @@ export const settingsController = (app: Elysia) => {
         });
       } catch (error) {
         console.error(`[${requestId}] Error accessing file:`, error);
-        throw new Error(`Failed to access file: ${error.message}`);
+        throw new Error(`Failed to access file: ${getErrorMessage(error)}`);
       }
     } catch (error) {
       // Log the error
