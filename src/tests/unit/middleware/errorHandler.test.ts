@@ -30,7 +30,7 @@ describe('Error Handler Middleware', () => {
   });
 
   it('should handle ParseError with 400 status', async () => {
-    const error = new ParseError('Invalid format');
+    const error = new ParseError();
     error.name = 'ParseError'; // Ensure name is set correctly
     const response = errorHandler(error);
 

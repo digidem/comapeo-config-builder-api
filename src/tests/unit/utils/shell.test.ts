@@ -21,8 +21,11 @@ describe('Shell Utils', () => {
       };
     });
 
+    // Add the __promisify__ property to satisfy TypeScript
+    (mockExec as any).__promisify__ = () => {};
+
     // Replace the real exec with our mock
-    spyOn(childProcess, 'exec').mockImplementation(mockExec);
+    spyOn(childProcess, 'exec').mockImplementation(mockExec as any);
 
     // Call the function
     const result = await runShellCommand('test command');
@@ -47,8 +50,11 @@ describe('Shell Utils', () => {
       };
     });
 
+    // Add the __promisify__ property to satisfy TypeScript
+    (mockExec as any).__promisify__ = () => {};
+
     // Replace the real exec with our mock
-    spyOn(childProcess, 'exec').mockImplementation(mockExec);
+    spyOn(childProcess, 'exec').mockImplementation(mockExec as any);
 
     // Call the function and expect it to reject
     await expect(runShellCommand('test command')).rejects.toThrow('command failed');
@@ -69,8 +75,11 @@ describe('Shell Utils', () => {
       };
     });
 
+    // Add the __promisify__ property to satisfy TypeScript
+    (mockExec as any).__promisify__ = () => {};
+
     // Replace the real exec with our mock
-    spyOn(childProcess, 'exec').mockImplementation(mockExec);
+    spyOn(childProcess, 'exec').mockImplementation(mockExec as any);
 
     // Call the function
     const result = await runShellCommand('test command');
@@ -93,8 +102,11 @@ describe('Shell Utils', () => {
       };
     });
 
+    // Add the __promisify__ property to satisfy TypeScript
+    (mockExec as any).__promisify__ = () => {};
+
     // Replace the real exec with our mock
-    spyOn(childProcess, 'exec').mockImplementation(mockExec);
+    spyOn(childProcess, 'exec').mockImplementation(mockExec as any);
 
     // Mock setTimeout to immediately call the callback
     const originalSetTimeout = global.setTimeout;

@@ -10,7 +10,7 @@ import AdmZip from 'adm-zip';
  * @param extension File extension
  * @returns Path to the created file
  */
-export async function createTempFile(content: string | Buffer, extension = '.txt'): Promise<string> {
+export async function createTempFile(content: string, extension = '.txt'): Promise<string> {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-'));
   const filePath = path.join(tmpDir, `test-file${extension}`);
   await fs.writeFile(filePath, content);
@@ -27,7 +27,7 @@ export async function createTestZip(metadata: any = { name: 'test', version: '1.
   const metadataPath = path.join(tmpDir, 'metadata.json');
 
   // Write metadata file
-  await fs.writeFile(metadataPath, JSON.stringify(metadata));
+  await fs.writeFile(metadataPath, String(JSON.stringify(metadata)));
 
   // Create a simple ZIP file using AdmZip
   const zip = new AdmZip();

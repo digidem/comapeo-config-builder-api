@@ -14,8 +14,8 @@ describe('Logger Middleware', () => {
     consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
 
     // Mock crypto.randomUUID
-    mockUUID = 'test-uuid-1234';
-    spyOn(crypto, 'randomUUID').mockImplementation(() => mockUUID);
+    mockUUID = '12345678-1234-1234-1234-123456789012';
+    spyOn(crypto, 'randomUUID').mockImplementation(() => mockUUID as `${string}-${string}-${string}-${string}-${string}`);
 
     // Mock Date.now
     const originalDateNow = Date.now;
