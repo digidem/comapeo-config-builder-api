@@ -20,15 +20,25 @@ RUN apt-get update && apt-get install -yq \
 # Install Bun with a specific version
 RUN npm install -g bun@1.0.16
 
+# Install mapnik and its dependencies
+RUN apt-get update && apt-get install -y \
+    libmapnik-dev libmapnik3.1 mapnik-utils python3 python3-mapnik \
+    node-gyp build-essential python3-dev
+
+# Install mapnik globally first
+RUN npm install -g mapnik --build-from-source
+
 # Install mapeo-settings-builder with specific dependencies
 RUN npm install -g mapeo-settings-builder --unsafe-perm
 
-# Create a fallback script in case mapeo-settings-builder fails
-RUN echo '#!/bin/bash\n\
-if [ "$1" = "--version" ]; then\n  echo "1.0.0"\n  exit 0\nfi\n\
-if [ "$1" = "build" ]; then\n  echo "Creating mock output file..."\n  mkdir -p "$(dirname "$4")"\n  echo "{}" > "$4"\n  echo "Mock build completed successfully"\n  exit 0\nfi\n\
-echo "Unknown command: $1"\nexit 1' > /usr/local/bin/mapeo-settings-builder-fallback && \
-    chmod +x /usr/local/bin/mapeo-settings-builder-fallback
+# Create a test script to verify mapnik is working
+RUN echo 'console.log("Testing mapnik..."); try { require("mapnik"); console.log("Mapnik loaded successfully"); } catch(e) { console.error(e); process.exit(1); }' > /tmp/test-mapnik.js
+
+# Run the test script
+RUN node /tmp/test-mapnik.js
+
+# Verify mapeo-settings-builder installation
+RUN mapeo-settings-builder --version || (echo "mapeo-settings-builder installation failed" && exit 1)
 # Set the working directory in the container
 WORKDIR /app
 

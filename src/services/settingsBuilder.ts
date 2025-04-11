@@ -145,28 +145,17 @@ export class SettingsBuilderService {
       // Start the shell command with proper error handling
       try {
         // Check if mapeo-settings-builder is available
-        let useMainCommand = true;
         try {
-          await runShellCommand('mapeo-settings-builder -h', 10000);
-          console.log(`[${requestId}] mapeo-settings-builder help output received`);
-        } catch (helpError) {
-          console.error(`[${requestId}] Error checking mapeo-settings-builder:`, helpError);
-          console.log(`[${requestId}] Trying fallback script...`);
-
-          try {
-            const fallbackOutput = await runShellCommand('mapeo-settings-builder-fallback --version', 10000);
-            console.log(`[${requestId}] mapeo-settings-builder-fallback version: ${fallbackOutput.trim()}`);
-            useMainCommand = false;
-          } catch (fallbackError) {
-            console.error(`[${requestId}] Fallback script also failed:`, fallbackError);
-            console.log(`[${requestId}] Will use mock file creation instead`);
-            throw fallbackError; // Force using the mock file creation
-          }
+          const versionOutput = await runShellCommand('mapeo-settings-builder --version', 10000);
+          console.log(`[${requestId}] mapeo-settings-builder version: ${versionOutput.trim()}`);
+        } catch (versionError) {
+          console.error(`[${requestId}] Error checking mapeo-settings-builder version:`, versionError);
+          // Don't proceed if we can't even check the version
+          throw new ProcessingError(`mapeo-settings-builder is not available: ${getErrorMessage(versionError)}`);
         }
 
         // Log the command we're about to run
-        const commandName = useMainCommand ? 'mapeo-settings-builder' : 'mapeo-settings-builder-fallback';
-        const command = `${commandName} build ${fullConfigPath} -o ${buildPath}`;
+        const command = `mapeo-settings-builder build ${fullConfigPath} -o ${buildPath}`;
         console.log(`[${requestId}] Running command: ${command}`);
 
         // Execute the command and wait for it to complete
@@ -175,29 +164,33 @@ export class SettingsBuilderService {
       } catch (error) {
         console.error(`[${requestId}] Error building settings:`, error);
 
-        // Always create a mock output file in Docker environment
-        console.log(`[${requestId}] Creating mock output file after error`);
-        try {
-          // Create the build directory if it doesn't exist
-          await fs.mkdir(path.dirname(buildPath), { recursive: true });
+        // Only create mock files in test environment, not in production
+        if (process.env.NODE_ENV === 'test' || process.env.BUN_ENV === 'test') {
+          console.log(`[${requestId}] Creating mock output file for tests`);
+          try {
+            // Create the build directory if it doesn't exist
+            await fs.mkdir(path.dirname(buildPath), { recursive: true });
 
-          // Create a mock comapeocat file (which is just a ZIP file)
-          const AdmZip = require('adm-zip');
-          const zip = new AdmZip();
-          zip.addFile('metadata.json', Buffer.from(JSON.stringify({ name: metadata.name, version: metadata.version })));
-          zip.addFile('presets/default.json', Buffer.from(JSON.stringify({ name: 'Default', tags: {} })));
-          zip.writeZip(buildPath);
+            // Create a mock comapeocat file (which is just a ZIP file)
+            const AdmZip = require('adm-zip');
+            const zip = new AdmZip();
+            zip.addFile('metadata.json', Buffer.from(JSON.stringify({ name: metadata.name, version: metadata.version })));
+            zip.addFile('presets/default.json', Buffer.from(JSON.stringify({ name: 'Default', tags: {} })));
+            zip.writeZip(buildPath);
 
-          console.log(`[${requestId}] Created mock output file at ${buildPath}`);
-          return {
-            filePath: buildPath,
-            fileName: path.basename(buildPath),
-            tmpDir
-          };
-        } catch (mockError) {
-          console.error(`[${requestId}] Error creating mock file:`, mockError);
-          throw new ProcessingError(`Failed to build settings and create mock file: ${getErrorMessage(error)}`);
+            console.log(`[${requestId}] Created mock output file at ${buildPath}`);
+            return {
+              filePath: buildPath,
+              fileName: path.basename(buildPath),
+              tmpDir
+            };
+          } catch (mockError) {
+            console.error(`[${requestId}] Error creating mock file:`, mockError);
+          }
         }
+
+        // In production, throw the error
+        throw new ProcessingError(`Failed to build settings: ${getErrorMessage(error)}`);
       }
 
       // Verify the file exists
