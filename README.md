@@ -27,10 +27,23 @@ Key features:
 
 ### Using Docker
 
-1. **Run the Docker container:**
+1. **Pull the Docker image:**
 
     ```bash
-    docker run -p 3000:3000 communityfirst/comapeo-config-builder-api
+    docker pull ghcr.io/digidem/comapeo-config-builder-api:latest
+    ```
+
+2. **Run the Docker container:**
+
+    ```bash
+    docker run -p 3000:3000 ghcr.io/digidem/comapeo-config-builder-api:latest
+    ```
+
+3. **Build and run locally:**
+
+    ```bash
+    docker build -t comapeo-config-builder-api:local .
+    docker run -p 3000:3000 comapeo-config-builder-api:local
     ```
 
 ### Using Bun
@@ -76,6 +89,12 @@ bun test --coverage
 
 # Run specific test files
 bun test src/tests/unit/utils/shell.test.ts
+
+# Test the API with a real ZIP file
+./scripts/test-api.sh
+
+# Test the API with a custom URL and ZIP file
+./scripts/test-api.sh --url http://localhost:3000 --file path/to/config.zip --output response.comapeocat
 ```
 
 ### Building
@@ -123,9 +142,9 @@ Builds a Comapeo configuration file from a ZIP file.
 The project uses GitHub Actions for continuous integration and deployment:
 
 - **CI Workflow**: Runs tests, type checking, and health checks on every push and pull request
+- **Docker Build, Test, and Deploy**: Builds the Docker image, tests it with real API requests, and deploys it to GitHub Container Registry
 - **Security Scan**: Checks for vulnerabilities in dependencies and Docker image
 - **Lint**: Ensures code quality and style consistency
-- **Deploy**: Builds and publishes the Docker image to Docker Hub
 
 ## License
 
