@@ -23,7 +23,8 @@ const app = new Elysia()
 
       // Log the FormData entries
       console.log('FormData entries:');
-      for (const [key, value] of formData.entries()) {
+      // Use type assertion to fix TypeScript error
+      for (const [key, value] of (formData as any).entries()) {
         // Check if it's a File-like object
         if (typeof value === 'object' && value !== null && 'size' in value) {
           const fileObj = value as { name?: string; type?: string; size: number };
