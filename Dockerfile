@@ -24,5 +24,8 @@ COPY . .
 # Expose the port the app runs on
 EXPOSE 3000
 
+# Build the application
+RUN bun run build
+
 # Command to run the application
-CMD ["bun", "run", "index.ts"]
+CMD ["bun", "run", "start"]
