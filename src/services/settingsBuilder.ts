@@ -155,8 +155,8 @@ export class SettingsBuilderService {
           console.log(`[${requestId}] mapeo-settings-builder is not available, will use fallback if allowed`);
         }
 
-        // Check if we're in a test or CI environment, or if mapeo-settings-builder is not available
-        if (process.env.NODE_ENV === 'test' || process.env.BUN_ENV === 'test' || process.env.CI === 'true' || !mapeoSettingsBuilderAvailable) {
+        // Check if we're in a test or CI environment
+        if (process.env.NODE_ENV === 'test' || process.env.BUN_ENV === 'test' || process.env.CI === 'true') {
           console.log(`[${requestId}] Running in test/CI environment, creating mock output file`);
           try {
             // Create the build directory if it doesn't exist
