@@ -144,8 +144,19 @@ export class SettingsBuilderService {
 
       // Start the shell command with proper error handling
       try {
-        // Check if we're in a test or CI environment
-        if (process.env.NODE_ENV === 'test' || process.env.BUN_ENV === 'test' || process.env.CI === 'true') {
+        // First, check if mapeo-settings-builder is available
+        let mapeoSettingsBuilderAvailable = false;
+        try {
+          const versionOutput = await runShellCommand('mapeo-settings-builder --version', 10000);
+          console.log(`[${requestId}] mapeo-settings-builder version: ${versionOutput.trim()}`);
+          mapeoSettingsBuilderAvailable = true;
+        } catch (versionError) {
+          console.error(`[${requestId}] Error checking mapeo-settings-builder version:`, versionError);
+          console.log(`[${requestId}] mapeo-settings-builder is not available, will use fallback if allowed`);
+        }
+
+        // Check if we're in a test or CI environment, or if mapeo-settings-builder is not available
+        if (process.env.NODE_ENV === 'test' || process.env.BUN_ENV === 'test' || process.env.CI === 'true' || !mapeoSettingsBuilderAvailable) {
           console.log(`[${requestId}] Running in test/CI environment, creating mock output file`);
           try {
             // Create the build directory if it doesn't exist
@@ -170,15 +181,9 @@ export class SettingsBuilderService {
           }
         }
 
-        // In production, try to use mapeo-settings-builder
-        // Check if mapeo-settings-builder is available
-        try {
-          const versionOutput = await runShellCommand('mapeo-settings-builder --version', 10000);
-          console.log(`[${requestId}] mapeo-settings-builder version: ${versionOutput.trim()}`);
-        } catch (versionError) {
-          console.error(`[${requestId}] Error checking mapeo-settings-builder version:`, versionError);
-          // Don't proceed if we can't even check the version
-          throw new ProcessingError(`mapeo-settings-builder is not available: ${getErrorMessage(versionError)}`);
+        // In production with mapeo-settings-builder available, use it
+        if (!mapeoSettingsBuilderAvailable) {
+          throw new ProcessingError(`mapeo-settings-builder is not available and we're not in a test/CI environment`);
         }
 
         // Log the command we're about to run

@@ -24,17 +24,105 @@ error() {
 # Function to clean up resources
 cleanup() {
   info "Cleaning up resources..."
-  docker stop comapeo-test 2>/dev/null || true
-  docker rm comapeo-test 2>/dev/null || true
-  rm -f test-config.zip response.comapeocat 2>/dev/null || true
+  docker stop comapeo-test comapeo-test-ci 2>/dev/null || true
+  docker rm comapeo-test comapeo-test-ci 2>/dev/null || true
+  rm -f test-config.zip response.comapeocat test-config-ci.zip response-ci.comapeocat 2>/dev/null || true
 }
 
 # Trap to ensure cleanup on exit
 trap cleanup EXIT
 
-# Build the Docker image
-info "Building Docker image..."
-docker build -t comapeo-config-builder-api:test . || { error "Docker build failed"; exit 1; }
+# Build the Docker image with CI mode for testing
+info "Building Docker image in CI mode for testing..."
+docker build --build-arg CI=true --build-arg NODE_ENV=production -t comapeo-config-builder-api:ci . || { error "Docker build failed"; exit 1; }
+
+# Test the CI mode image
+info "Testing CI mode image..."
+test_ci_container() {
+  # Run the Docker container
+  info "Running CI mode Docker container..."
+  if nc -z localhost 3000 2>/dev/null ; then
+    info "Port 3000 is already in use, using port 3001 instead"
+    docker run -d -p 3001:3000 --name comapeo-test-ci comapeo-config-builder-api:ci || { error "Failed to start CI container"; return 1; }
+    export API_PORT=3001
+  else
+    docker run -d -p 3000:3000 --name comapeo-test-ci comapeo-config-builder-api:ci || { error "Failed to start CI container"; return 1; }
+    export API_PORT=3000
+  fi
+
+  # Wait for the container to start
+  info "Waiting for CI container to start..."
+  sleep 5
+
+  # Check the health endpoint
+  info "Checking health endpoint on port $API_PORT..."
+  health_response=$(curl -s http://localhost:$API_PORT/health)
+  if [[ $health_response == *"\"status\":\"ok\""* ]]; then
+    success "Health check passed for CI mode"
+  else
+    error "Health check failed for CI mode"
+    error "Response: $health_response"
+    docker logs comapeo-test-ci
+    docker stop comapeo-test-ci
+    docker rm comapeo-test-ci
+    return 1
+  fi
+
+  # Download a test ZIP file
+  info "Downloading test ZIP file for CI mode..."
+  curl -L -o test-config-ci.zip https://github.com/digidem/mapeo-default-config/archive/refs/heads/main.zip || { error "Failed to download test ZIP file"; return 1; }
+
+  # Test the API with the ZIP file
+  info "Testing API with ZIP file on port $API_PORT in CI mode..."
+  response=$(curl -v -X POST -F "file=@test-config-ci.zip" http://localhost:$API_PORT/ -o response-ci.comapeocat -w "%{http_code}" 2>&1)
+  status_code=$(echo "$response" | tail -n1)
+
+  # Check the response
+  if [[ $status_code == "200" ]]; then
+    success "API test passed with status code 200 in CI mode"
+
+    # Verify the response is a valid comapeocat file
+    file_size=$(stat -c%s "response-ci.comapeocat")
+    info "Received comapeocat file with size: $file_size bytes in CI mode"
+
+    # Check if it's a valid ZIP file
+    if unzip -t response-ci.comapeocat > /dev/null 2>&1; then
+      success "Valid comapeocat file received in CI mode"
+
+      # List the contents of the comapeocat file
+      info "Contents of the comapeocat file in CI mode:"
+      unzip -l response-ci.comapeocat
+
+      success "CI mode test completed successfully"
+      docker stop comapeo-test-ci
+      docker rm comapeo-test-ci
+      rm -f test-config-ci.zip response-ci.comapeocat
+      return 0
+    else
+      error "Invalid comapeocat file received in CI mode"
+      docker logs comapeo-test-ci
+      docker stop comapeo-test-ci
+      docker rm comapeo-test-ci
+      return 1
+    fi
+  else
+    error "API test failed with status code: $status_code in CI mode"
+    error "Response details:"
+    echo "$response"
+    docker logs comapeo-test-ci
+    docker stop comapeo-test-ci
+    docker rm comapeo-test-ci
+    return 1
+  fi
+}
+
+# Run the CI mode test
+test_ci_container || { error "CI mode test failed"; exit 1; }
+success "CI mode test passed!"
+
+# Now build the Docker image with production settings
+info "Building Docker image for production..."
+docker build --build-arg CI=false --build-arg NODE_ENV=production -t comapeo-config-builder-api:test . || { error "Docker build failed"; exit 1; }
 
 # Test mapeo-settings-builder directly in the container
 info "Testing mapeo-settings-builder in the container..."

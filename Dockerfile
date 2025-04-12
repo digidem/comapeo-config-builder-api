@@ -2,8 +2,10 @@
 FROM node:18-bullseye-slim
 
 # Set environment variables
-ARG CI=true
+ARG CI=false
 ENV CI=$CI
+ARG NODE_ENV=production
+ENV NODE_ENV=$NODE_ENV
 
 # Install dependencies for mapnik and other required libraries
 RUN apt-get update && apt-get install -yq \
