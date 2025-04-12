@@ -2,6 +2,7 @@ import AdmZip from 'adm-zip';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { exec } from 'child_process';
 import { ValidationError, ProcessingError } from '../types/errors';
 import { runShellCommand } from '../utils/shell';
 import { getErrorMessage } from '../utils/errorHelpers';
@@ -188,11 +189,43 @@ export class SettingsBuilderService {
 
         // Log the command we're about to run
         const command = `mapeo-settings-builder build ${fullConfigPath} -o ${buildPath}`;
-        console.log(`[${requestId}] Running command: ${command}`);
+        console.log(`[${requestId}] Running command in background: ${command}`);
 
-        // Execute the command and wait for it to complete
-        const output = await runShellCommand(command, 120000);
-        console.log(`[${requestId}] Command output: ${output}`);
+        // Execute the command in the background without waiting for it to complete
+        // This is the key difference from the previous approach
+        exec(command, (error, stdout, stderr) => {
+          if (error) {
+            console.error(`[${requestId}] Command execution error:`, error);
+          }
+          if (stderr) {
+            console.error(`[${requestId}] Command stderr:`, stderr);
+          }
+          console.log(`[${requestId}] Command stdout:`, stdout);
+        });
+
+        // Wait for the file to be created by polling
+        console.log(`[${requestId}] Waiting for .comapeocat file...`);
+        let builtSettingsPath = '';
+        const maxAttempts = 120; // 2 minutes with 1 second delay
+        const delayBetweenAttempts = 1000; // 1 second
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          try {
+            const fileStats = await fs.stat(buildPath);
+            if (fileStats.isFile() && fileStats.size > 0) {
+              builtSettingsPath = buildPath;
+              console.log(`[${requestId}] Found .comapeocat file after ${attempt + 1} attempts`);
+              break;
+            }
+          } catch (error) {
+            // File doesn't exist yet, continue waiting
+          }
+          await new Promise(resolve => setTimeout(resolve, delayBetweenAttempts));
+        }
+
+        if (!builtSettingsPath) {
+          throw new ProcessingError('No .comapeocat file found in the build directory after waiting');
+        }
       } catch (error) {
         console.error(`[${requestId}] Error building settings:`, error);
         throw new ProcessingError(`Failed to build settings: ${getErrorMessage(error)}`);

@@ -202,11 +202,14 @@ if [[ $status_code == "200" ]]; then
     exit 1
   fi
 else
-  # In production mode, we expect a 500 error due to mapnik issues
-  if [[ $status_code == "500" ]]; then
-    info "API test failed with status code 500 in production mode (expected)"
-    info "This is the correct behavior - production should fail without mapnik"
-    success "Production test passed: API correctly fails without creating mock files"
+  # In production mode, we should now have a working mapnik
+  if [[ $status_code == "200" ]]; then
+    info "API test passed with status code 200 in production mode"
+    info "Received comapeocat file with size: $(wc -c < response.comapeocat) bytes in production mode"
+    success "Valid comapeocat file received in production mode"
+    info "Contents of the comapeocat file in production mode:"
+    unzip -l response.comapeocat
+    success "Production test passed: API correctly processed the request with mapnik"
   else
     error "Unexpected status code: $status_code in production mode"
     error "Response details:"
