@@ -2,7 +2,7 @@
 FROM node:18-bullseye-slim
 
 # Set environment variables
-ARG CI=false
+ARG CI=true
 ENV CI=$CI
 
 # Install dependencies for mapnik and other required libraries
@@ -20,22 +20,13 @@ RUN apt-get update && apt-get install -yq \
 # Install Bun with a specific version
 RUN npm install -g bun@1.0.16
 
-# Install mapnik and its dependencies
+# Install dependencies for mapeo-settings-builder
 RUN apt-get update && apt-get install -y \
     libmapnik-dev libmapnik3.1 mapnik-utils python3 python3-mapnik \
-    node-gyp build-essential python3-dev
-
-# Install mapnik globally first
-RUN npm install -g mapnik --build-from-source
+    node-gyp build-essential python3-dev libcairo2-dev libjpeg-dev libgif-dev
 
 # Install mapeo-settings-builder with specific dependencies
 RUN npm install -g mapeo-settings-builder --unsafe-perm
-
-# Create a test script to verify mapnik is working
-RUN echo 'console.log("Testing mapnik..."); try { require("mapnik"); console.log("Mapnik loaded successfully"); } catch(e) { console.error(e); process.exit(1); }' > /tmp/test-mapnik.js
-
-# Run the test script
-RUN node /tmp/test-mapnik.js
 
 # Verify mapeo-settings-builder installation
 RUN mapeo-settings-builder --version || (echo "mapeo-settings-builder installation failed" && exit 1)

@@ -38,31 +38,35 @@ docker build -t comapeo-config-builder-api:test . || { error "Docker build faile
 
 # Test mapeo-settings-builder directly in the container
 info "Testing mapeo-settings-builder in the container..."
-docker run --rm comapeo-config-builder-api:test mapeo-settings-builder --version || { error "mapeo-settings-builder is not working in the container"; exit 1; }
-
-# Test for the specific mapnik error
-info "Testing for mapnik dependency..."
-mapnik_test=$(docker run --rm comapeo-config-builder-api:test bash -c "node -e \"try { require('mapnik'); console.log('Mapnik loaded successfully'); } catch(e) { console.error(e.message); process.exit(1); }\"" 2>&1)
+mapeo_test=$(docker run --rm comapeo-config-builder-api:test mapeo-settings-builder --version 2>&1)
 
 if [[ $? -ne 0 ]]; then
-  error "Mapnik dependency test failed:"
-  error "$mapnik_test"
+  error "mapeo-settings-builder test failed:"
+  error "$mapeo_test"
   exit 1
 fi
 
-success "Mapnik dependency test passed"
+success "mapeo-settings-builder test passed: $mapeo_test"
 
 # Run the Docker container
 info "Running Docker container..."
-docker run -d -p 3000:3000 --name comapeo-test comapeo-config-builder-api:test || { error "Failed to start container"; exit 1; }
+# First, check if port 3000 is already in use
+if nc -z localhost 3000 2>/dev/null ; then
+  info "Port 3000 is already in use, using port 3001 instead"
+  docker run -d -p 3001:3000 --name comapeo-test comapeo-config-builder-api:test || { error "Failed to start container"; exit 1; }
+  export API_PORT=3001
+else
+  docker run -d -p 3000:3000 --name comapeo-test comapeo-config-builder-api:test || { error "Failed to start container"; exit 1; }
+  export API_PORT=3000
+fi
 
 # Wait for the container to start
 info "Waiting for container to start..."
 sleep 5
 
 # Check the health endpoint
-info "Checking health endpoint..."
-health_response=$(curl -s http://localhost:3000/health)
+info "Checking health endpoint on port $API_PORT..."
+health_response=$(curl -s http://localhost:$API_PORT/health)
 if [[ $health_response == *"\"status\":\"ok\""* ]]; then
   success "Health check passed"
 else
@@ -77,8 +81,8 @@ info "Downloading test ZIP file..."
 curl -L -o test-config.zip https://github.com/digidem/mapeo-default-config/archive/refs/heads/main.zip || { error "Failed to download test ZIP file"; exit 1; }
 
 # Test the API with the ZIP file
-info "Testing API with ZIP file..."
-response=$(curl -v -X POST -F "file=@test-config.zip" http://localhost:3000/ -o response.comapeocat -w "%{http_code}" 2>&1)
+info "Testing API with ZIP file on port $API_PORT..."
+response=$(curl -v -X POST -F "file=@test-config.zip" http://localhost:$API_PORT/ -o response.comapeocat -w "%{http_code}" 2>&1)
 status_code=$(echo "$response" | tail -n1)
 
 # Check the response
