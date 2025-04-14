@@ -1,0 +1,182 @@
+name: Docker Build, Test, and Deploy
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Install mapeo-settings-builder
+        run: npm install -g mapeo-settings-builder
+
+      - name: Run TypeScript type checking
+        run: bun tsc --noEmit
+
+      - name: Run tests
+        run: BUN_ENV=test bun test
+
+      - name: Run tests with coverage
+        run: BUN_ENV=test bun test --coverage
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: comapeo-config-builder-api:test
+          build-args: |
+            CI=true
+
+      - name: Start Docker container
+        run: docker run -d -p 3000:3000 -e CI=true --name api-test comapeo-config-builder-api:test
+
+      - name: Wait for container to start
+        run: sleep 5
+
+      - name: Health check
+        run: |
+          response=$(curl -s http://localhost:3000/health)
+          if [[ $response == *"\"status\":\"ok\""* ]]; then
+            echo "Health check passed"
+          else
+            echo "Health check failed"
+            echo "Response: $response"
+            exit 1
+          fi
+
+      - name: Download test ZIP file
+        run: |
+          curl -L -o test-config.zip https://github.com/digidem/mapeo-default-config/archive/refs/heads/main.zip
+
+      - name: Debug Docker container
+        run: |
+          # Check if mapeo-settings-builder is installed in the container
+          docker exec api-test which mapeo-settings-builder || echo "mapeo-settings-builder not found"
+          docker exec api-test ls -la /usr/local/bin/ || echo "Cannot list /usr/local/bin"
+
+          # Check container logs
+          docker logs api-test
+
+      - name: Test API with real ZIP file
+        run: |
+          # Create a form data request with the ZIP file with verbose output
+          echo "Sending request to API..."
+          response_with_headers=$(curl -v -X POST -F "file=@test-config.zip" http://localhost:3000/ -o response.comapeocat -w "\n%{http_code}")
+          response=$(echo "$response_with_headers" | tail -n1)
+
+          echo "Full response headers:"
+          echo "$response_with_headers"
+
+          # If there's an error response body, display it
+          if [[ -f response.comapeocat ]]; then
+            echo "Response body (first 1000 bytes):"
+            head -c 1000 response.comapeocat
+            echo ""
+
+            # Check file type
+            file response.comapeocat
+          fi
+
+          # Check if the response status code is 200
+          if [[ $response == "200" ]]; then
+            echo "API test passed with status code 200"
+
+            # Verify the response is a valid comapeocat file
+            file_size=$(stat -c%s "response.comapeocat")
+            if [[ $file_size -gt 0 ]]; then
+              echo "Received comapeocat file with size: $file_size bytes"
+
+              # Check if it's a valid ZIP file
+              if unzip -t response.comapeocat > /dev/null 2>&1; then
+                echo "Valid comapeocat file received"
+              else
+                echo "Invalid comapeocat file received"
+                exit 1
+              fi
+            else
+              echo "Empty comapeocat file received"
+              exit 1
+            fi
+          else
+            echo "API test failed with status code: $response"
+            exit 1
+          fi
+
+      - name: Stop Docker container
+        run: docker stop api-test
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: comapeo-config-builder-api:test
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=long
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
