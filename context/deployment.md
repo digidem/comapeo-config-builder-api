@@ -416,14 +416,6 @@ pm2 startup
 
 ---
 
-### 3. Fly.io Deployment (Legacy)
-
-**File**: `.github/workflows/fly-deploy.yml`
-
-**Status**: May be deprecated in favor of Docker Hub deployment
-
----
-
 ## Environment Configuration
 
 ### Environment Variables
