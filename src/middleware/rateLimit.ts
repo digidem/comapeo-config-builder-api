@@ -221,11 +221,11 @@ export function rateLimitPlugin(config: RateLimitConfig) {
 
       // Add rate limit headers
       const usage = limiter.getUsage(clientIP);
-      set.headers = {
-        ...(set.headers || {}),
-        'X-RateLimit-Limit': String(usage.limit),
-        'X-RateLimit-Remaining': String(usage.remaining)
-      };
+      if (!set.headers) {
+        set.headers = {};
+      }
+      set.headers['X-RateLimit-Limit'] = String(usage.limit);
+      set.headers['X-RateLimit-Remaining'] = String(usage.remaining);
     });
   };
 }

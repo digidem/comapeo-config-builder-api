@@ -29,12 +29,12 @@ export function createApp() {
   });
 
   // Legacy endpoint (kept for backward compatibility)
-  app.post('/', async ({ body }: { body: { file: File } }) => {
+  app.post('/', async ({ body }: any) => {
+    return handleBuildSettings(body.file);
+  }, {
     body: t.Object({
       file: t.File()
-    });
-
-    return handleBuildSettings(body.file);
+    })
   });
 
   return app;
