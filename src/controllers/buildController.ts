@@ -8,16 +8,34 @@ import { validateBuildRequest } from '../validators/schema';
 import { buildFromJSON } from '../services/jsonBuilder';
 import { buildSettings } from '../services/settingsBuilder';
 
+// Request size limits
+const MAX_JSON_SIZE = 10 * 1024 * 1024; // 10MB for JSON
+const MAX_ZIP_SIZE = 50 * 1024 * 1024; // 50MB for ZIP
+
 /**
  * Handle POST /build request
  * Supports both JSON mode and legacy ZIP mode
  */
 export async function handleBuild(request: Request): Promise<Response> {
+  // Check content-length header for size limits
+  const contentLength = request.headers.get('content-length');
+  if (contentLength) {
+    const size = parseInt(contentLength, 10);
+    if (size > MAX_ZIP_SIZE) {
+      return createErrorResponse(
+        'PayloadTooLarge',
+        `Request body size ${size} bytes exceeds maximum ${MAX_ZIP_SIZE} bytes`,
+        413
+      );
+    }
+  }
+
   const contentType = request.headers.get('Content-Type') || '';
 
-  // Detect mode based on Content-Type
-  const isJSONMode = contentType.includes('application/json');
-  const isZIPMode = contentType.includes('multipart/form-data');
+  // Detect mode based on Content-Type (more robust parsing)
+  const normalizedContentType = contentType.toLowerCase().split(';')[0].trim();
+  const isJSONMode = normalizedContentType === 'application/json';
+  const isZIPMode = normalizedContentType === 'multipart/form-data';
 
   try {
     if (isJSONMode) {
@@ -86,16 +104,18 @@ async function handleJSONMode(request: Request): Promise<Response> {
   }
 
   // Build the .comapeocat file
+  let cleanup: (() => Promise<void>) | undefined;
   try {
-    const builtFilePath = await buildFromJSON(buildRequest);
+    const buildResult = await buildFromJSON(buildRequest);
+    cleanup = buildResult.cleanup;
 
     // Read the file and return it
-    const file = Bun.file(builtFilePath);
+    const file = Bun.file(buildResult.path);
     const blob = await file.arrayBuffer();
 
     const filename = `${buildRequest.metadata.name}-${buildRequest.metadata.version}.comapeocat`;
 
-    return new Response(blob, {
+    const response = new Response(blob, {
       status: 200,
       headers: {
         'Content-Type': 'application/octet-stream',
@@ -103,8 +123,19 @@ async function handleJSONMode(request: Request): Promise<Response> {
       }
     });
 
+    // Clean up temporary files after response is created
+    await cleanup();
+
+    return response;
+
   } catch (error) {
     console.error('Error building from JSON:', error);
+
+    // Clean up on error if cleanup function exists
+    if (cleanup) {
+      await cleanup();
+    }
+
     return createErrorResponse(
       'BuildError',
       `Error building configuration: ${(error as Error).message}`,

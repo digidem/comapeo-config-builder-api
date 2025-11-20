@@ -8,13 +8,20 @@ import path from 'path';
 import os from 'os';
 import { runShellCommand } from '../utils/shell';
 import { config } from '../config/app';
+import { safeFetch } from '../utils/urlValidator';
+import { validateAndSanitizeSvg } from '../utils/svgSanitizer';
+
+export interface BuildResult {
+  path: string;
+  cleanup: () => Promise<void>;
+}
 
 /**
  * Build a .comapeocat file from a JSON mode request
  * @param request The BuildRequest payload
- * @returns The path to the built .comapeocat file
+ * @returns The path to the built .comapeocat file and cleanup function
  */
-export async function buildFromJSON(request: BuildRequest): Promise<string> {
+export async function buildFromJSON(request: BuildRequest): Promise<BuildResult> {
   // Create a temporary directory for the workspace
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), config.tempDirPrefix));
   console.log('JSON mode: Temporary directory created:', tmpDir);
@@ -76,7 +83,19 @@ export async function buildFromJSON(request: BuildRequest): Promise<string> {
     }
 
     console.log('.comapeocat file found:', builtSettingsPath);
-    return builtSettingsPath;
+
+    // Return path and cleanup function
+    return {
+      path: builtSettingsPath,
+      cleanup: async () => {
+        try {
+          await fs.rm(tmpDir, { recursive: true, force: true });
+          console.log('Cleaned up temporary directory:', tmpDir);
+        } catch (cleanupError) {
+          console.error('Error cleaning up temporary directory:', cleanupError);
+        }
+      }
+    };
 
   } catch (error) {
     // Clean up on error
@@ -87,9 +106,6 @@ export async function buildFromJSON(request: BuildRequest): Promise<string> {
     }
     throw error;
   }
-
-  // Note: Cleanup is intentionally NOT done here to allow the file to be served
-  // The cleanup should be handled after the file is served to the client
 }
 
 /**
@@ -134,13 +150,12 @@ async function writeIcons(tmpDir: string, icons: Icon[]): Promise<void> {
       // Use inline SVG data
       svgContent = icon.svgData;
     } else if (icon.svgUrl) {
-      // Fetch SVG from URL
+      // Fetch SVG from URL with security restrictions
       try {
-        const response = await fetch(icon.svgUrl);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch icon from ${icon.svgUrl}: ${response.statusText}`);
-        }
-        svgContent = await response.text();
+        svgContent = await safeFetch(icon.svgUrl, {
+          maxSize: 1024 * 1024, // 1MB limit
+          timeout: 10000 // 10 second timeout
+        });
       } catch (error) {
         throw new Error(`Error fetching icon ${icon.id} from ${icon.svgUrl}: ${(error as Error).message}`);
       }
@@ -149,9 +164,15 @@ async function writeIcons(tmpDir: string, icons: Icon[]): Promise<void> {
       throw new Error(`Icon ${icon.id} has neither svgData nor svgUrl`);
     }
 
-    // Write the SVG file
+    // Sanitize SVG content to prevent XSS
+    const sanitizationResult = validateAndSanitizeSvg(svgContent);
+    if (sanitizationResult.error) {
+      throw new Error(`Icon ${icon.id} failed sanitization: ${sanitizationResult.error}`);
+    }
+
+    // Write the sanitized SVG file
     const iconPath = path.join(iconsDir, `${icon.id}.svg`);
-    await fs.writeFile(iconPath, svgContent, 'utf-8');
+    await fs.writeFile(iconPath, sanitizationResult.sanitized, 'utf-8');
   }
 }
 

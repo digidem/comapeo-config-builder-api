@@ -3,6 +3,8 @@
  */
 
 import type { BuildRequest, Icon, Category, Field, TranslationsByLocale } from '../types/schema';
+import { validateIconUrl } from '../utils/urlValidator';
+import { isValidSvgStructure } from '../utils/svgSanitizer';
 
 export class ValidationError extends Error {
   constructor(message: string) {
@@ -100,8 +102,19 @@ function validateIcons(icons: Icon[], errors: string[], iconIds: Set<string>): v
     }
 
     // Validate svgData format if present
-    if (hasSvgData && !icon.svgData!.trim().startsWith('<svg')) {
-      errors.push(`Icon ${icon.id} svgData must begin with "<svg"`);
+    if (hasSvgData) {
+      const svgCheck = isValidSvgStructure(icon.svgData!);
+      if (!svgCheck.valid) {
+        errors.push(`Icon ${icon.id} has invalid SVG data: ${svgCheck.error}`);
+      }
+    }
+
+    // Validate svgUrl format if present
+    if (hasSvgUrl) {
+      const urlCheck = validateIconUrl(icon.svgUrl!);
+      if (!urlCheck.valid) {
+        errors.push(`Icon ${icon.id} has invalid or unsafe URL: ${urlCheck.error}`);
+      }
     }
   }
 }
