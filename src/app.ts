@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { cors } from "@elysiajs/cors";
 import { handleBuildSettings } from './controllers/settingsController';
+import { handleBuild } from './controllers/buildController';
 
 /**
  * Create and configure the Elysia application
@@ -15,7 +16,12 @@ export function createApp() {
     timestamp: new Date().toISOString()
   }));
 
-  // Main build endpoint
+  // v2.0.0 Build endpoint - supports both JSON and ZIP modes
+  app.post('/build', async ({ request }: { request: Request }) => {
+    return handleBuild(request);
+  });
+
+  // Legacy endpoint (kept for backward compatibility)
   app.post('/', async ({ body }: { body: { file: File } }) => {
     body: t.Object({
       file: t.File()
