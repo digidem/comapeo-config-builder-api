@@ -1,17 +1,65 @@
 # Agent Guide - CoMapeo Config Builder API
 
-This file serves as a quick navigation guide for AI coding agents working with this codebase. For detailed information, refer to the context files linked below.
+This file provides guidance to AI coding agents working with this codebase. For detailed information, refer to the context files linked below.
 
-## Quick Start
+## Project Overview
 
-**What is this?** A REST API that processes CoMapeo configuration ZIP files and returns `.comapeocat` files.
+This is a REST API that processes CoMapeo configuration files. It accepts ZIP files containing CoMapeo configuration settings, processes them using the `mapeo-settings-builder` CLI tool, and returns `.comapeocat` files ready for use in CoMapeo applications.
 
-**Tech Stack**: Bun runtime + Elysia framework + TypeScript
+**Runtime**: Bun (JavaScript runtime, pinned to v1.0.16)
+**Framework**: Elysia (Bun-native web framework)
+**Key Dependency**: `mapeo-settings-builder` (must be installed globally)
 
 **Key Entry Points**:
 - `src/index.ts` - Application entry point, starts the server
 - `src/app.ts` - Elysia app factory with route definitions
 - `src/services/settingsBuilder.ts` - Core build logic
+
+## Development Commands
+
+```bash
+# Install dependencies
+bun install
+
+# Development mode with hot reload
+bun run dev
+
+# Production mode
+bun run start
+
+# Build for deployment
+bun run build
+
+# Linting
+bun run lint
+
+# Run all tests
+bun test
+
+# Run specific test suites
+bun run test:unit
+bun run test:integration
+
+# Run a single test file
+bun test src/tests/unit/utils/shell.test.ts
+
+# Test the API with a real ZIP file (requires running server)
+./scripts/test-api.sh
+./scripts/test-api.sh --url http://localhost:3000 --file path/to/config.zip --output response.comapeocat
+```
+
+## API Usage
+
+```bash
+# Upload a ZIP file and receive a .comapeocat file
+curl -X POST \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@config.zip" \
+  --output output.comapeocat \
+  http://localhost:3000/
+```
+
+## Quick Start
 
 ## Context Documentation
 
@@ -276,11 +324,19 @@ Use `fs.mkdtemp()` with unique prefix for isolation.
 
 ---
 
+## Important Notes
+
+- The `mapeo-settings-builder` CLI must be installed globally in the execution environment
+- Input ZIP must contain a `metadata.json` file with `name` and `version` fields
+- Build process is asynchronous and uses polling with configurable timeout (default: 120s)
+- CORS is enabled via `@elysiajs/cors`
+- TypeScript is configured for strict mode with ESNext target
+- Temporary directory cleanup is currently commented out in `settingsBuilder.ts:58` but should be enabled for production
+
 ## Getting Help
 
-- **CLAUDE.md**: Contains usage instructions and development commands
 - **README.md**: Project overview and setup instructions
-- **Context files**: Detailed documentation on specific topics
+- **Context files**: Detailed documentation on specific topics (see above)
 - **Tests**: Examples of usage patterns and expected behavior
 
 ---
