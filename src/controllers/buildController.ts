@@ -7,6 +7,7 @@ import type { BuildRequest, ErrorResponse } from '../types/schema';
 import { validateBuildRequest } from '../validators/schema';
 import { buildFromJSON } from '../services/jsonBuilder';
 import { buildSettings } from '../services/settingsBuilder';
+import { logger } from '../utils/logger';
 
 // Request size limits
 const MAX_JSON_SIZE = 10 * 1024 * 1024; // 10MB for JSON
@@ -53,7 +54,10 @@ export async function handleBuild(request: Request): Promise<Response> {
       );
     }
   } catch (error) {
-    console.error('Error in handleBuild:', error);
+    logger.error('Error in handleBuild', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
 
     // Handle validation errors
     if (error instanceof Error && error.name === 'ValidationError') {
@@ -77,7 +81,7 @@ export async function handleBuild(request: Request): Promise<Response> {
  * Handle JSON mode request
  */
 async function handleJSONMode(request: Request): Promise<Response> {
-  console.log('Processing JSON mode request');
+  logger.info('Processing JSON mode request', { mode: 'json' });
 
   // Parse JSON body
   let buildRequest: BuildRequest;
@@ -129,7 +133,10 @@ async function handleJSONMode(request: Request): Promise<Response> {
     return response;
 
   } catch (error) {
-    console.error('Error building from JSON:', error);
+    logger.error('Error building from JSON', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
 
     // Clean up on error if cleanup function exists
     if (cleanup) {
@@ -148,7 +155,7 @@ async function handleJSONMode(request: Request): Promise<Response> {
  * Handle legacy ZIP mode request
  */
 async function handleZIPMode(request: Request): Promise<Response> {
-  console.log('Processing legacy ZIP mode request');
+  logger.info('Processing legacy ZIP mode request', { mode: 'zip', deprecated: true });
 
   // Parse multipart form data
   let formData: FormData;
@@ -193,7 +200,12 @@ async function handleZIPMode(request: Request): Promise<Response> {
     });
 
   } catch (error) {
-    console.error('Error building from ZIP:', error);
+    logger.error('Error building from ZIP', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      mode: 'zip',
+      deprecated: true
+    });
     return new Response(
       JSON.stringify({
         error: 'BuildError',

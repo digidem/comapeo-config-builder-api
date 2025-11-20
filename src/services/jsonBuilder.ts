@@ -10,6 +10,7 @@ import { runShellCommand } from '../utils/shell';
 import { config } from '../config/app';
 import { safeFetch } from '../utils/urlValidator';
 import { validateAndSanitizeSvg } from '../utils/svgSanitizer';
+import { logger } from '../utils/logger';
 
 export interface BuildResult {
   path: string;
@@ -24,7 +25,7 @@ export interface BuildResult {
 export async function buildFromJSON(request: BuildRequest): Promise<BuildResult> {
   // Create a temporary directory for the workspace
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), config.tempDirPrefix));
-  console.log('JSON mode: Temporary directory created:', tmpDir);
+  logger.info('Temporary directory created for JSON build', { tmpDir, mode: 'json' });
 
   try {
     // 1. Write metadata.json
@@ -57,11 +58,11 @@ export async function buildFromJSON(request: BuildRequest): Promise<BuildResult>
     const buildFileName = `${request.metadata.name}-${request.metadata.version}.comapeocat`;
     const buildPath = path.join(buildDir, buildFileName);
 
-    console.log('Building .comapeocat file:', buildPath);
+    logger.info('Starting build process', { buildPath, name: request.metadata.name, version: request.metadata.version });
     runShellCommand(`mapeo-settings-builder build ${tmpDir} -o ${buildPath}`);
 
     // 7. Poll for the output file
-    console.log('Waiting for .comapeocat file...');
+    logger.debug('Polling for build output file', { buildPath, maxAttempts: config.maxAttempts });
     const { maxAttempts, delayBetweenAttempts } = config;
     let builtSettingsPath = '';
 
@@ -82,7 +83,7 @@ export async function buildFromJSON(request: BuildRequest): Promise<BuildResult>
       throw new Error('No .comapeocat file found in the build directory after waiting');
     }
 
-    console.log('.comapeocat file found:', builtSettingsPath);
+    logger.info('Build completed successfully', { builtSettingsPath, name: request.metadata.name, version: request.metadata.version });
 
     // Return path and cleanup function
     return {
@@ -90,9 +91,9 @@ export async function buildFromJSON(request: BuildRequest): Promise<BuildResult>
       cleanup: async () => {
         try {
           await fs.rm(tmpDir, { recursive: true, force: true });
-          console.log('Cleaned up temporary directory:', tmpDir);
+          logger.debug('Cleaned up temporary directory', { tmpDir });
         } catch (cleanupError) {
-          console.error('Error cleaning up temporary directory:', cleanupError);
+          logger.error('Error cleaning up temporary directory', { tmpDir, error: cleanupError });
         }
       }
     };
@@ -102,7 +103,7 @@ export async function buildFromJSON(request: BuildRequest): Promise<BuildResult>
     try {
       await fs.rm(tmpDir, { recursive: true, force: true });
     } catch (cleanupError) {
-      console.error('Error cleaning up temporary directory:', cleanupError);
+      logger.error('Error cleaning up temporary directory after build failure', { tmpDir, error: cleanupError });
     }
     throw error;
   }

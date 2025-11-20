@@ -116,6 +116,12 @@ bun run build
 bun run lint
 ```
 
+## API Documentation
+
+Full API documentation is available in the OpenAPI 3.0 specification:
+- **File**: [`openapi.yaml`](./openapi.yaml)
+- **View Online**: Use [Swagger Editor](https://editor.swagger.io/) or [Redoc](https://redocly.github.io/redoc/)
+
 ## Usage
 
 ### JSON Mode (Recommended - v2.0.0)
@@ -176,7 +182,11 @@ See [JSON Schema Documentation](#json-schema) below for the complete schema defi
 
 ### Legacy ZIP Mode (Deprecated)
 
-**Note:** ZIP mode is deprecated and will be removed in a future version. Please migrate to JSON mode.
+**⚠️ DEPRECATION NOTICE:**
+- **Status**: Deprecated as of v2.0.0 (January 2025)
+- **Removal Date**: v3.0.0 (planned for January 2026)
+- **Action Required**: Migrate to JSON mode before January 2026
+- All ZIP mode requests include `X-Deprecation-Warning` header
 
 ```bash
 curl -X POST http://localhost:3000/build \
@@ -416,6 +426,62 @@ Becomes:
   "icons": [{ "id": "tree", "svgData": "<svg>...</svg>" }],
   "categories": [{ "id": "trees", "name": "Trees", "iconId": "tree" }],
   "fields": [{ "id": "species", "name": "Species", "type": "text" }]
+}
+```
+
+## Production Configuration
+
+### Environment Variables
+
+```bash
+# Logging
+LOG_LEVEL=info          # Options: debug, info, warn, error (default: info)
+
+# Rate Limiting
+RATE_LIMIT_ENABLED=true # Enable/disable rate limiting (default: true)
+# Rate limit: 100 requests per 15 minutes per IP address
+
+# Server
+PORT=3000               # Server port (default: 3000)
+```
+
+### Security Features
+
+**Rate Limiting** (v2.0.0+):
+- Default: 100 requests per 15 minutes per IP
+- Configurable via `RATE_LIMIT_ENABLED` environment variable
+- Returns `429 Too Many Requests` when exceeded
+- Response headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `Retry-After`
+
+**Request Size Limits**:
+- JSON mode: 10MB maximum
+- ZIP mode: 50MB maximum
+- Returns `413 Payload Too Large` when exceeded
+
+**SSRF Protection**:
+- Blocks access to private IP ranges (10.x, 192.168.x, 172.16-31.x)
+- Blocks localhost and loopback addresses
+- Blocks cloud metadata endpoints (AWS, GCP, Azure)
+- URL timeout: 10 seconds
+- File size limit: 1MB for remote SVG files
+
+**XSS Prevention**:
+- SVG sanitization removes dangerous tags and event handlers
+- Validates SVG structure before processing
+
+### Structured Logging
+
+All logs are output in JSON format for easy parsing:
+
+```json
+{
+  "timestamp": "2025-01-20T12:00:00.000Z",
+  "level": "INFO",
+  "service": "comapeo-config-builder-api",
+  "message": "Processing JSON mode request",
+  "context": {
+    "mode": "json"
+  }
 }
 ```
 

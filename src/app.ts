@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { cors } from "@elysiajs/cors";
 import { handleBuildSettings } from './controllers/settingsController';
 import { handleBuild } from './controllers/buildController';
+import { rateLimitPlugin, defaultRateLimitConfig } from './middleware/rateLimit';
 
 /**
  * Create and configure the Elysia application
@@ -9,6 +10,12 @@ import { handleBuild } from './controllers/buildController';
  */
 export function createApp() {
   const app = new Elysia().use(cors());
+
+  // Add rate limiting if enabled (default: enabled in production)
+  const rateLimitEnabled = process.env.RATE_LIMIT_ENABLED !== 'false';
+  if (rateLimitEnabled) {
+    app.use(rateLimitPlugin(defaultRateLimitConfig));
+  }
 
   // Health check endpoint
   app.get('/health', () => ({

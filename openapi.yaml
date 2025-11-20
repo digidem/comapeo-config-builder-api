@@ -1,0 +1,448 @@
+openapi: 3.0.3
+info:
+  title: CoMapeo Config Builder API
+  description: |
+    REST API for building CoMapeo configuration files (.comapeocat) from JSON or ZIP input.
+
+    Version 2.0.0 introduces JSON mode with comprehensive validation and security features.
+
+    **Key Features:**
+    - JSON mode with structured schema validation
+    - Legacy ZIP mode support (deprecated)
+    - SSRF and XSS protection
+    - Rate limiting (100 requests/15 min per IP)
+    - Request size limits (10MB JSON, 50MB ZIP)
+
+  version: 2.0.0
+  contact:
+    name: Digital Democracy
+    url: https://github.com/digidem/comapeo-config-builder-api
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+  - url: https://api.example.com
+    description: Production server (example)
+
+tags:
+  - name: health
+    description: Health check endpoints
+  - name: build
+    description: Configuration build endpoints
+
+paths:
+  /health:
+    get:
+      tags:
+        - health
+      summary: Health check
+      description: Returns the health status of the API
+      operationId: getHealth
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                  timestamp:
+                    type: string
+                    format: date-time
+              example:
+                status: ok
+                timestamp: "2025-01-20T12:00:00.000Z"
+
+  /build:
+    post:
+      tags:
+        - build
+      summary: Build CoMapeo configuration
+      description: |
+        Build a .comapeocat file from JSON or ZIP input.
+
+        **JSON Mode (Recommended):**
+        - Content-Type: application/json
+        - Structured schema with comprehensive validation
+        - SSRF and XSS protection
+
+        **ZIP Mode (Deprecated):**
+        - Content-Type: multipart/form-data
+        - Will be removed in v3.0.0 (January 2026)
+        - Includes X-Deprecation-Warning header
+
+      operationId: buildConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuildRequest'
+            example:
+              metadata:
+                name: "Forest Monitoring"
+                version: "1.0.0"
+                description: "Configuration for forest monitoring"
+              icons:
+                - id: "tree_icon"
+                  svgData: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"10\"/></svg>"
+              categories:
+                - id: "trees"
+                  name: "Trees"
+                  iconId: "tree_icon"
+                  color: "#4CAF50"
+              fields:
+                - id: "species"
+                  name: "Species"
+                  type: "select"
+                  options:
+                    - value: "oak"
+                      label: "Oak"
+                    - value: "pine"
+                      label: "Pine"
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: ZIP file containing configuration
+              required:
+                - file
+      responses:
+        '200':
+          description: Successfully built configuration file
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: 'attachment; filename="config.comapeocat"'
+            X-Deprecation-Warning:
+              schema:
+                type: string
+              description: Present only for ZIP mode requests
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Rate limit maximum requests
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Rate limit remaining requests
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "ValidationError"
+                message: "metadata.name is required and must be non-empty"
+                details:
+                  errors:
+                    - "metadata.name is required and must be non-empty"
+                    - "metadata.version must follow semantic versioning format"
+        '413':
+          description: Payload too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "PayloadTooLarge"
+                message: "Request body size exceeds maximum 10485760 bytes"
+        '429':
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds until rate limit resets
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Will be 0
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+              description: Unix timestamp when limit resets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "TooManyRequests"
+                message: "Too many requests from this IP, please try again later"
+                retryAfter: 300
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "BuildError"
+                message: "Error building configuration: Build process failed"
+
+components:
+  schemas:
+    BuildRequest:
+      type: object
+      required:
+        - metadata
+        - categories
+        - fields
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        icons:
+          type: array
+          items:
+            $ref: '#/components/schemas/Icon'
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/Field'
+        translations:
+          $ref: '#/components/schemas/TranslationsByLocale'
+
+    Metadata:
+      type: object
+      required:
+        - name
+        - version
+      properties:
+        name:
+          type: string
+          description: Configuration name
+        version:
+          type: string
+          pattern: '^\d+\.\d+\.\d+$'
+          description: Semantic version (MAJOR.MINOR.PATCH)
+        builderName:
+          type: string
+          description: Builder tool name
+        builderVersion:
+          type: string
+          description: Builder tool version
+        description:
+          type: string
+          description: Human-readable description
+
+    Icon:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          description: Unique identifier
+        svgUrl:
+          type: string
+          format: uri
+          description: URL to SVG file (mutually exclusive with svgData)
+        svgData:
+          type: string
+          description: Inline SVG content (mutually exclusive with svgUrl)
+        altText:
+          type: string
+          description: Accessibility text
+        tags:
+          type: array
+          items:
+            type: string
+      oneOf:
+        - required: [svgUrl]
+        - required: [svgData]
+
+    Category:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          description: Hex color code
+        iconId:
+          type: string
+          description: Reference to Icon.id
+        parentCategoryId:
+          type: string
+          description: Reference to parent Category.id
+        tags:
+          type: array
+          items:
+            type: string
+        defaultFieldIds:
+          type: array
+          items:
+            type: string
+          description: Default fields for this category
+        visible:
+          type: boolean
+
+    Field:
+      type: object
+      required:
+        - id
+        - name
+        - type
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum:
+            - text
+            - textarea
+            - number
+            - integer
+            - select
+            - multiselect
+            - boolean
+            - date
+            - datetime
+            - photo
+            - location
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/SelectOption'
+          description: Required for select and multiselect types
+        iconId:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        required:
+          type: boolean
+        defaultValue:
+          description: Default value for the field
+        visible:
+          type: boolean
+        min:
+          type: number
+          description: Minimum value (for number/integer types)
+        max:
+          type: number
+          description: Maximum value (for number/integer types)
+        step:
+          type: number
+          description: Step value (for number/integer types)
+
+    SelectOption:
+      type: object
+      required:
+        - value
+        - label
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+        iconId:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    TranslationsByLocale:
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/Translations'
+
+    Translations:
+      type: object
+      properties:
+        metadata:
+          type: object
+          properties:
+            name:
+              type: string
+            description:
+              type: string
+        categories:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+        fields:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+              options:
+                type: object
+                additionalProperties:
+                  type: string
+        icons:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              altText:
+                type: string
+              tags:
+                type: array
+                items:
+                  type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error type
+        message:
+          type: string
+          description: Error message
+        details:
+          type: object
+          description: Additional error details
+        retryAfter:
+          type: integer
+          description: Seconds to wait before retrying (for rate limit errors)
