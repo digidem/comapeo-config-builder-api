@@ -59,12 +59,16 @@ async function readLimitedBody(request: Request, maxSize: number, signal?: Abort
   }
 
   // For better compatibility with Bun's Request implementation in tests and production,
-  // use arrayBuffer() directly and check size after. This is safe for our size limits
-  // (10MB/50MB) and simpler than streaming.
+  // use text() and convert to ArrayBuffer. This avoids "Body already used" errors
+  // that can occur with arrayBuffer() in certain test environments.
   try {
-    logger.debug('readLimitedBody: starting to read body');
-    const bodyBuffer = await request.arrayBuffer();
-    logger.debug('readLimitedBody: body read', { byteLength: bodyBuffer.byteLength });
+    logger.debug('readLimitedBody: starting to read body as text');
+    const bodyText = await request.text();
+    logger.debug('readLimitedBody: body read', { textLength: bodyText.length });
+
+    // Convert text to ArrayBuffer
+    const encoder = new TextEncoder();
+    const bodyBuffer = encoder.encode(bodyText).buffer as ArrayBuffer;
 
     if (bodyBuffer.byteLength > maxSize) {
       const error = new Error(`Request body size ${bodyBuffer.byteLength} bytes exceeds maximum ${maxSize} bytes`);
@@ -91,11 +95,7 @@ async function readLimitedBody(request: Request, maxSize: number, signal?: Abort
  * @param context Optional request context with abort signal for timeout handling
  */
 export async function handleBuild(request: Request, context?: RequestContext): Promise<Response> {
-  // Clone the request to ensure body stream is available
-  // This prevents "Body already used" errors in test environments
-  const clonedRequest = request.clone();
-
-  const contentType = clonedRequest.headers.get('Content-Type') || '';
+  const contentType = request.headers.get('Content-Type') || '';
 
   // Detect mode based on Content-Type (more robust parsing)
   const normalizedContentType = contentType.toLowerCase().split(';')[0].trim();
@@ -106,7 +106,7 @@ export async function handleBuild(request: Request, context?: RequestContext): P
   const maxSize = isJSONMode ? MAX_JSON_SIZE : MAX_ZIP_SIZE;
 
   // Early rejection if Content-Length header indicates oversized body
-  const contentLength = clonedRequest.headers.get('content-length');
+  const contentLength = request.headers.get('content-length');
   if (contentLength) {
     const size = parseInt(contentLength, 10);
     if (size > maxSize) {
@@ -121,10 +121,10 @@ export async function handleBuild(request: Request, context?: RequestContext): P
   try {
     if (isJSONMode) {
       // JSON mode - read body with size limit then parse
-      return await handleJSONMode(clonedRequest, maxSize, context?.signal);
+      return await handleJSONMode(request, maxSize, context?.signal);
     } else if (isZIPMode) {
       // Legacy ZIP mode - read body with size limit then parse
-      return await handleZIPMode(clonedRequest, maxSize, context?.signal);
+      return await handleZIPMode(request, maxSize, context?.signal);
     } else {
       // Unknown mode
       return createErrorResponse(
