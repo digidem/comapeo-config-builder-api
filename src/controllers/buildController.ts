@@ -18,8 +18,16 @@ const MAX_ZIP_SIZE = 50 * 1024 * 1024; // 50MB for ZIP
 /**
  * Read request body with size limit enforcement
  * Prevents unbounded memory usage from chunked/unlimited requests
+ * @param request The HTTP request
+ * @param maxSize Maximum allowed body size in bytes
+ * @param signal Optional abort signal to cancel reading on timeout
  */
-async function readLimitedBody(request: Request, maxSize: number): Promise<ArrayBuffer> {
+async function readLimitedBody(request: Request, maxSize: number, signal?: AbortSignal): Promise<ArrayBuffer> {
+  // Check if already aborted
+  if (signal?.aborted) {
+    throw new Error('Request aborted');
+  }
+
   const reader = request.body?.getReader();
   if (!reader) {
     throw new Error('No request body');
@@ -30,6 +38,12 @@ async function readLimitedBody(request: Request, maxSize: number): Promise<Array
 
   try {
     while (true) {
+      // Check for abort signal during reading
+      if (signal?.aborted) {
+        reader.cancel();
+        throw new Error('Request aborted');
+      }
+
       const { done, value } = await reader.read();
       if (done) break;
 
@@ -147,7 +161,7 @@ async function handleJSONMode(request: Request, maxSize: number, signal?: AbortS
   // Read body with size limit enforcement, then parse JSON
   let buildRequest: BuildRequest;
   try {
-    const bodyBuffer = await readLimitedBody(request, maxSize);
+    const bodyBuffer = await readLimitedBody(request, maxSize, signal);
     const bodyText = new TextDecoder().decode(bodyBuffer);
     buildRequest = JSON.parse(bodyText) as BuildRequest;
   } catch (error) {
@@ -242,7 +256,7 @@ async function handleZIPMode(request: Request, maxSize: number, signal?: AbortSi
   // This prevents OOM from unbounded chunked uploads
   let bodyBuffer: ArrayBuffer;
   try {
-    bodyBuffer = await readLimitedBody(request, maxSize);
+    bodyBuffer = await readLimitedBody(request, maxSize, signal);
   } catch (error) {
     if (error instanceof Error && error.name === 'PayloadTooLarge') {
       return createErrorResponse(
