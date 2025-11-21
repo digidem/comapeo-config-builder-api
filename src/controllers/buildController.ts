@@ -58,26 +58,64 @@ async function readLimitedBody(request: Request, maxSize: number, signal?: Abort
     throw new Error('Request aborted');
   }
 
-  // Use arrayBuffer() for binary-safe reading (preserves ZIP/binary data)
-  // This is necessary for both JSON (decoded later) and ZIP (used directly) modes
-  try {
-    const bodyBuffer = await request.arrayBuffer();
-
-    if (bodyBuffer.byteLength > maxSize) {
-      const error = new Error(`Request body size ${bodyBuffer.byteLength} bytes exceeds maximum ${maxSize} bytes`);
-      error.name = 'PayloadTooLarge';
-      throw error;
-    }
-
-    return bodyBuffer;
-  } catch (error) {
-    // Re-throw PayloadTooLarge errors
-    if (error instanceof Error && error.name === 'PayloadTooLarge') {
-      throw error;
-    }
-    // Wrap other errors
-    throw new Error(`Failed to read request body: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  // Stream the body chunk-by-chunk to enforce size limits DURING reading
+  // This prevents OOM from chunked uploads that omit/spoof Content-Length
+  const reader = request.body?.getReader();
+  if (!reader) {
+    throw new Error('No request body');
   }
+
+  const chunks: Uint8Array[] = [];
+  let totalSize = 0;
+
+  try {
+    while (true) {
+      // Check for abort signal during reading
+      if (signal?.aborted) {
+        await reader.cancel();
+        throw new Error('Request aborted');
+      }
+
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      // Skip empty chunks
+      if (!value) continue;
+
+      totalSize += value.length;
+
+      // Enforce size limit BEFORE accepting chunk into memory
+      if (totalSize > maxSize) {
+        await reader.cancel();
+        const error = new Error(`Request body size exceeds maximum ${maxSize} bytes`);
+        error.name = 'PayloadTooLarge';
+        throw error;
+      }
+
+      chunks.push(value);
+    }
+  } catch (error) {
+    // Release lock before rethrowing
+    try {
+      reader.releaseLock();
+    } catch {
+      // Ignore release errors
+    }
+    throw error;
+  }
+
+  // Release lock after successful read
+  reader.releaseLock();
+
+  // Combine chunks into single ArrayBuffer
+  const combined = new Uint8Array(totalSize);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return combined.buffer as ArrayBuffer;
 }
 
 /**
