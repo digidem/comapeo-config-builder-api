@@ -238,11 +238,33 @@ async function handleJSONMode(request: Request, maxSize: number, signal?: AbortS
 async function handleZIPMode(request: Request, maxSize: number, _signal?: AbortSignal): Promise<Response> {
   logger.info('Processing legacy ZIP mode request', { mode: 'zip', deprecated: true });
 
-  // Parse multipart form data
-  // Note: formData() buffers the body; Content-Length pre-check helps but isn't foolproof
+  // Read body with size limit BEFORE parsing multipart
+  // This prevents OOM from unbounded chunked uploads
+  let bodyBuffer: ArrayBuffer;
+  try {
+    bodyBuffer = await readLimitedBody(request, maxSize);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'PayloadTooLarge') {
+      return createErrorResponse(
+        'PayloadTooLarge',
+        error.message,
+        413
+      );
+    }
+    throw error;
+  }
+
+  // Create new Request with the limited body for formData parsing
+  const limitedRequest = new Request(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body: bodyBuffer
+  });
+
+  // Parse multipart form data from the size-limited body
   let formData: FormData;
   try {
-    formData = await request.formData();
+    formData = await limitedRequest.formData();
   } catch (error) {
     return createErrorResponse(
       'InvalidFormData',
@@ -257,15 +279,6 @@ async function handleZIPMode(request: Request, maxSize: number, _signal?: AbortS
       'MissingFile',
       'No file provided in the request body',
       400
-    );
-  }
-
-  // Enforce size limit on the actual file (catches chunked uploads)
-  if (file.size > maxSize) {
-    return createErrorResponse(
-      'PayloadTooLarge',
-      `File size ${file.size} bytes exceeds maximum ${maxSize} bytes`,
-      413
     );
   }
 
