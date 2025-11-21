@@ -60,7 +60,7 @@ export function createApp(): AppContext {
   // Also wrapped with timeout protection
   app.post('/', async ({ body }: any) => {
     return withTimeout(
-      async () => handleBuildSettings(body.file),
+      async (_request, context) => handleBuildSettings(body.file, { signal: context.signal }),
       defaultTimeoutConfig
     )(new Request('http://localhost/'));
   }, {

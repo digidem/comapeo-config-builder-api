@@ -1,20 +1,25 @@
 import { buildSettings } from '../services/settingsBuilder';
 
+export interface BuildSettingsOptions {
+  signal?: AbortSignal;
+}
+
 /**
  * Handle the request to build settings from a ZIP file
  * @param file The uploaded ZIP file
+ * @param options Optional settings including abort signal
  * @returns The built .comapeocat file or an error response
  */
-export async function handleBuildSettings(file: File) {
+export async function handleBuildSettings(file: File, options?: BuildSettingsOptions) {
   try {
     if (!file) {
       throw new Error('No file provided in the request body');
     }
-    
+
     // Process the file and build the settings
     const zipBuffer = await file.arrayBuffer();
-    const builtSettingsPath = await buildSettings(zipBuffer);
-    
+    const builtSettingsPath = await buildSettings(zipBuffer, { signal: options?.signal });
+
     // Return the built settings file
     return Bun.file(builtSettingsPath);
   } catch (error) {
