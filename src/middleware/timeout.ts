@@ -49,6 +49,7 @@ export function withTimeout(
     const startTime = Date.now();
     const controller = new AbortController();
     let timeoutId: Timer | null = null;
+    let timedOut = false;
 
     // Create context with abort signal for handler
     const context: RequestContext = {
@@ -57,9 +58,13 @@ export function withTimeout(
       timeoutMs: config.timeoutMs
     };
 
+    // Start the handler immediately and store the promise
+    const handlerPromise = handler(request, context);
+
     // Create timeout promise that also aborts the controller
     const timeoutPromise = new Promise<Response>((resolve) => {
       timeoutId = setTimeout(() => {
+        timedOut = true;
         const elapsed = Date.now() - startTime;
         logger.warn('Request timeout', {
           path: new URL(request.url).pathname,
@@ -76,13 +81,21 @@ export function withTimeout(
     // Race the handler against the timeout
     try {
       const response = await Promise.race([
-        handler(request, context),
+        handlerPromise,
         timeoutPromise
       ]);
 
       // Clear timeout if request completed before timeout
       if (timeoutId !== null) {
         clearTimeout(timeoutId);
+      }
+
+      // If timeout won, swallow any subsequent rejection from the handler
+      // to prevent unhandled promise rejection crashes
+      if (timedOut) {
+        handlerPromise.catch(() => {
+          // Intentionally swallowed - handler was aborted due to timeout
+        });
       }
 
       return response;
