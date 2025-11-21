@@ -99,7 +99,7 @@ async function readLimitedBody(request: Request, maxSize: number, signal?: Abort
     offset += chunk.length;
   }
 
-  return combined.buffer;
+  return combined.buffer as ArrayBuffer;
 }
 
 /**

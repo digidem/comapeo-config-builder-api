@@ -197,7 +197,7 @@ export function rateLimitPlugin(config: RateLimitConfig): {
 } {
   const limiter = new RateLimiter(config);
 
-  const plugin = (app: Elysia) => {
+  const plugin = (app: Elysia): any => {
     return app.onBeforeHandle(async ({ request, set }) => {
       const clientIP = getClientIP(request);
       const result = limiter.isRateLimited(clientIP);

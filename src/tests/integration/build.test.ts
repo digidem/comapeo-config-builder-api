@@ -285,7 +285,7 @@ describe('POST /build Integration Tests', () => {
 
       // Create FormData with the ZIP file
       const formData = new FormData();
-      const blob = new Blob([zipBuffer], { type: 'application/zip' });
+      const blob = new Blob([new Uint8Array(zipBuffer)], { type: 'application/zip' });
       formData.append('file', blob, 'config.zip');
 
       const response = await app.handle(
@@ -312,7 +312,7 @@ describe('POST /build Integration Tests', () => {
       const zipBuffer = zip.toBuffer();
 
       const formData = new FormData();
-      const blob = new Blob([zipBuffer], { type: 'application/zip' });
+      const blob = new Blob([new Uint8Array(zipBuffer)], { type: 'application/zip' });
       formData.append('file', blob, 'config.zip');
 
       const response = await app.handle(
