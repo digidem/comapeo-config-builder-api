@@ -59,9 +59,17 @@ export async function buildFromJSON(request: BuildRequest): Promise<BuildResult>
     const buildPath = path.join(buildDir, buildFileName);
 
     logger.info('Starting build process', { buildPath, name: request.metadata.name, version: request.metadata.version });
-    runShellCommand(`mapeo-settings-builder build ${tmpDir} -o ${buildPath}`);
 
-    // 7. Poll for the output file
+    // Await the CLI execution to catch errors and ensure cleanup runs deterministically
+    try {
+      await runShellCommand(`mapeo-settings-builder build ${tmpDir} -o ${buildPath}`);
+    } catch (cliError) {
+      const errorMessage = cliError instanceof Error ? cliError.message : String(cliError);
+      logger.error('mapeo-settings-builder failed', { error: errorMessage, tmpDir, buildPath });
+      throw new Error(`Build CLI failed: ${errorMessage}`);
+    }
+
+    // 7. Verify the output file exists
     logger.debug('Polling for build output file', { buildPath, maxAttempts: config.maxAttempts });
     const { maxAttempts, delayBetweenAttempts } = config;
     let builtSettingsPath = '';
