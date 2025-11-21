@@ -11,9 +11,39 @@ import { logger } from '../utils/logger';
 import { metrics } from './metricsController';
 import type { RequestContext } from '../middleware/timeout';
 
+import path from 'path';
+
 // Request size limits
 const MAX_JSON_SIZE = 10 * 1024 * 1024; // 10MB for JSON
 const MAX_ZIP_SIZE = 50 * 1024 * 1024; // 50MB for ZIP
+
+/**
+ * Sanitize a string for use in Content-Disposition filename
+ * Prevents header injection and produces valid filenames
+ */
+function sanitizeFilename(input: string): string {
+  // Strip directory components
+  let sanitized = path.basename(input);
+
+  // Remove CRLF and other control characters (header injection prevention)
+  sanitized = sanitized.replace(/[\x00-\x1f\x7f]/g, '');
+
+  // Remove/escape quotes and backslashes
+  sanitized = sanitized.replace(/["\\\x00-\x1f]/g, '_');
+
+  // Allow only safe characters for filenames
+  sanitized = sanitized.replace(/[^a-zA-Z0-9\-_\.]/g, '_');
+
+  // Remove leading dots
+  sanitized = sanitized.replace(/^\.+/, '');
+
+  // Ensure non-empty
+  if (!sanitized) {
+    sanitized = 'config';
+  }
+
+  return sanitized;
+}
 
 /**
  * Read request body with size limit enforcement
@@ -200,7 +230,10 @@ async function handleJSONMode(request: Request, maxSize: number, signal?: AbortS
     const file = Bun.file(buildResult.path);
     const blob = await file.arrayBuffer();
 
-    const filename = `${buildRequest.metadata.name}-${buildRequest.metadata.version}.comapeocat`;
+    // Sanitize filename components to prevent header injection
+    const safeName = sanitizeFilename(buildRequest.metadata.name);
+    const safeVersion = sanitizeFilename(buildRequest.metadata.version);
+    const filename = `${safeName}-${safeVersion}.comapeocat`;
 
     const response = new Response(blob, {
       status: 200,
