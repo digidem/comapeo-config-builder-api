@@ -13,6 +13,34 @@ export class ValidationError extends Error {
   }
 }
 
+/**
+ * Validates that an ID is safe for use as a filename component.
+ * Rejects IDs containing path separators, control characters, or other unsafe characters.
+ */
+function isValidId(id: string): { valid: boolean; error?: string } {
+  // Check for path separators
+  if (id.includes('/') || id.includes('\\')) {
+    return { valid: false, error: 'contains path separators' };
+  }
+  // Check for path traversal
+  if (id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../')) {
+    return { valid: false, error: 'contains path traversal' };
+  }
+  // Check for leading dots (hidden files)
+  if (id.startsWith('.')) {
+    return { valid: false, error: 'cannot start with a dot' };
+  }
+  // Check for control characters
+  if (/[\x00-\x1f\x7f]/.test(id)) {
+    return { valid: false, error: 'contains control characters' };
+  }
+  // Check for characters that would be sanitized (only allow alphanumeric, hyphen, underscore, dot)
+  if (!/^[a-zA-Z0-9\-_.]+$/.test(id)) {
+    return { valid: false, error: 'contains invalid characters (only alphanumeric, hyphen, underscore, dot allowed)' };
+  }
+  return { valid: true };
+}
+
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
@@ -129,6 +157,12 @@ function validateIcons(icons: Icon[], errors: string[], iconIds: Set<string>): v
       continue; // Skip further validation for this icon
     }
 
+    // Validate ID is filesystem-safe
+    const idCheck = isValidId(icon.id);
+    if (!idCheck.valid) {
+      errors.push(`Icon '${icon.id}' has invalid ID: ${idCheck.error}`);
+    }
+
     // Check for duplicate IDs
     if (iconIds.has(icon.id)) {
       errors.push(`duplicate icon ID: ${icon.id}`);
@@ -194,6 +228,12 @@ function validateCategories(
     if (typeof category.id !== 'string' || category.id.trim() === '') {
       errors.push(`Category at index ${i} must have a non-empty string 'id'`);
       continue; // Skip further validation for this category
+    }
+
+    // Validate ID is filesystem-safe
+    const idCheck = isValidId(category.id);
+    if (!idCheck.valid) {
+      errors.push(`Category '${category.id}' has invalid ID: ${idCheck.error}`);
     }
 
     if (typeof category.name !== 'string' || category.name.trim() === '') {
@@ -300,6 +340,12 @@ function validateFields(
     if (typeof field.id !== 'string' || field.id.trim() === '') {
       errors.push(`Field at index ${i} must have a non-empty string 'id'`);
       continue; // Skip further validation for this field
+    }
+
+    // Validate ID is filesystem-safe
+    const idCheck = isValidId(field.id);
+    if (!idCheck.valid) {
+      errors.push(`Field '${field.id}' has invalid ID: ${idCheck.error}`);
     }
 
     if (typeof field.name !== 'string' || field.name.trim() === '') {
