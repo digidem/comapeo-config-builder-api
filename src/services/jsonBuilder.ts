@@ -61,7 +61,7 @@ export async function buildFromJSON(request: BuildRequest, options?: BuildOption
 
     // 2. Process and write icons
     if (request.icons && request.icons.length > 0) {
-      await writeIcons(tmpDir, request.icons);
+      await writeIcons(tmpDir, request.icons, options?.signal);
     }
 
     // 3. Write categories
@@ -188,11 +188,16 @@ async function writeMetadata(tmpDir: string, request: BuildRequest): Promise<voi
 /**
  * Write icons to the icons directory
  */
-async function writeIcons(tmpDir: string, icons: Icon[]): Promise<void> {
+async function writeIcons(tmpDir: string, icons: Icon[], signal?: AbortSignal): Promise<void> {
   const iconsDir = path.join(tmpDir, 'icons');
   await fs.mkdir(iconsDir, { recursive: true });
 
   for (const icon of icons) {
+    // Check for abort before processing each icon
+    if (signal?.aborted) {
+      throw new Error('Request aborted');
+    }
+
     let svgContent: string;
 
     if (icon.svgData) {
@@ -203,9 +208,14 @@ async function writeIcons(tmpDir: string, icons: Icon[]): Promise<void> {
       try {
         svgContent = await safeFetch(icon.svgUrl, {
           maxSize: 1024 * 1024, // 1MB limit
-          timeout: 10000 // 10 second timeout
+          timeout: 10000, // 10 second timeout
+          signal // Pass through abort signal
         });
       } catch (error) {
+        // Re-throw abort errors
+        if (error instanceof Error && error.message === 'Request aborted') {
+          throw error;
+        }
         throw new Error(`Error fetching icon ${icon.id} from ${icon.svgUrl}: ${(error as Error).message}`);
       }
     } else {

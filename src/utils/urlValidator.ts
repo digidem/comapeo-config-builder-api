@@ -175,10 +175,16 @@ export async function safeFetch(
   options: {
     maxSize?: number;
     timeout?: number;
+    signal?: AbortSignal;
   } = {}
 ): Promise<string> {
   const maxSize = options.maxSize || 1024 * 1024; // 1MB default
   const timeout = options.timeout || 10000; // 10s default
+
+  // Check if already aborted
+  if (options.signal?.aborted) {
+    throw new Error('Request aborted');
+  }
 
   // Validate initial URL
   const validation = validateIconUrl(url);
@@ -186,15 +192,26 @@ export async function safeFetch(
     throw new Error(`URL validation failed: ${validation.error}`);
   }
 
-  // Create abort controller for timeout
+  // Create abort controller for timeout, also link to external signal
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  // Link external signal to our controller
+  const externalAbortHandler = () => controller.abort();
+  if (options.signal) {
+    options.signal.addEventListener('abort', externalAbortHandler, { once: true });
+  }
 
   try {
     let currentUrl = url;
     let redirectCount = 0;
 
     while (true) {
+      // Check for abort at start of each iteration
+      if (options.signal?.aborted || controller.signal.aborted) {
+        throw new Error('Request aborted');
+      }
+
       // Validate resolved IP before fetching (prevents DNS rebinding)
       const parsedUrl = new URL(currentUrl);
       await validateResolvedIP(parsedUrl.hostname);
@@ -291,7 +308,11 @@ export async function safeFetch(
 
   } catch (error) {
     if (error instanceof Error) {
-      if (error.name === 'AbortError') {
+      if (error.name === 'AbortError' || error.message === 'Request aborted') {
+        // Check if it was external abort vs timeout
+        if (options.signal?.aborted) {
+          throw new Error('Request aborted');
+        }
         throw new Error(`Request timeout after ${timeout}ms`);
       }
       throw error;
@@ -299,5 +320,9 @@ export async function safeFetch(
     throw new Error('Unknown error fetching URL');
   } finally {
     clearTimeout(timeoutId);
+    // Clean up external signal listener
+    if (options.signal) {
+      options.signal.removeEventListener('abort', externalAbortHandler);
+    }
   }
 }
