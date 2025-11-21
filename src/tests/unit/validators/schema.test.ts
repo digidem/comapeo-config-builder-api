@@ -1022,5 +1022,58 @@ describe('Schema Validation', () => {
       expect(result.valid).toBe(false);
       expect(result.errors[0]).toContain('should not have a defaultValue');
     });
+
+    // Edge case tests
+    it('should reject NaN as defaultValue for number field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'value',
+          name: 'Value',
+          type: 'number',
+          defaultValue: NaN
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('finite number');
+    });
+
+    it('should reject Infinity as defaultValue for number field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'value',
+          name: 'Value',
+          type: 'number',
+          defaultValue: Infinity
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('finite number');
+    });
+
+    it('should reject array with non-string values for multiselect', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'tags',
+          name: 'Tags',
+          type: 'multiselect',
+          options: [
+            { value: 'red', label: 'Red' },
+            { value: 'blue', label: 'Blue' }
+          ],
+          defaultValue: ['red', 123, 'blue'] as any
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('must contain only strings');
+    });
   });
 });

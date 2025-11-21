@@ -40,10 +40,11 @@ export function withTimeout(
 ): (request: Request) => Promise<Response> {
   return async (request: Request): Promise<Response> => {
     const startTime = Date.now();
+    let timeoutId: Timer | null = null;
 
     // Create timeout promise
     const timeoutPromise = new Promise<Response>((resolve) => {
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         const elapsed = Date.now() - startTime;
         logger.warn('Request timeout', {
           path: new URL(request.url).pathname,
@@ -61,8 +62,19 @@ export function withTimeout(
         handler(request),
         timeoutPromise
       ]);
+
+      // Clear timeout if request completed before timeout
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+
       return response;
     } catch (error) {
+      // Clear timeout on error
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+
       logger.error('Request handler error', {
         path: new URL(request.url).pathname,
         method: request.method,

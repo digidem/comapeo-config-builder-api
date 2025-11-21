@@ -61,10 +61,11 @@ class GracefulShutdown {
   private async executeShutdown(config: ShutdownConfig): Promise<void> {
     const handlers = Array.from(this.handlers);
     const startTime = Date.now();
+    let timeoutId: Timer | null = null;
 
     // Create timeout promise
     const timeoutPromise = new Promise<void>((resolve) => {
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         logger.warn('Shutdown timeout reached', {
           timeoutMs: config.timeout,
           handlersCompleted: 0  // We don't track this precisely
@@ -92,6 +93,11 @@ class GracefulShutdown {
 
     // Race between timeout and actual shutdown
     await Promise.race([shutdownPromise, timeoutPromise]);
+
+    // Clear timeout if shutdown completed before timeout
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
 
     const elapsed = Date.now() - startTime;
     logger.info('Graceful shutdown completed', {

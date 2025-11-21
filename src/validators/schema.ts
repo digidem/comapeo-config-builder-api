@@ -278,6 +278,8 @@ function validateDefaultValue(field: Field, errors: string[]): void {
     case 'number':
       if (typeof value !== 'number') {
         errors.push(`Field ${field.id} defaultValue must be a number (field type: number)`);
+      } else if (!Number.isFinite(value)) {
+        errors.push(`Field ${field.id} defaultValue must be a finite number (got: ${value})`);
       } else if (field.min !== undefined && value < field.min) {
         errors.push(`Field ${field.id} defaultValue ${value} is below minimum ${field.min}`);
       } else if (field.max !== undefined && value > field.max) {
@@ -315,11 +317,17 @@ function validateDefaultValue(field: Field, errors: string[]): void {
     case 'multiselect':
       if (!Array.isArray(value)) {
         errors.push(`Field ${field.id} defaultValue must be an array (field type: multiselect)`);
-      } else if (field.options) {
-        const validValues = field.options.map(opt => opt.value);
-        const invalidValues = value.filter(v => !validValues.includes(v));
-        if (invalidValues.length > 0) {
-          errors.push(`Field ${field.id} defaultValue contains invalid options: ${invalidValues.join(', ')}. Valid options: ${validValues.join(', ')}`);
+      } else {
+        // Check all array elements are strings
+        const nonStringValues = value.filter(v => typeof v !== 'string');
+        if (nonStringValues.length > 0) {
+          errors.push(`Field ${field.id} defaultValue array must contain only strings`);
+        } else if (field.options) {
+          const validValues = field.options.map(opt => opt.value);
+          const invalidValues = value.filter(v => !validValues.includes(v));
+          if (invalidValues.length > 0) {
+            errors.push(`Field ${field.id} defaultValue contains invalid options: ${invalidValues.join(', ')}. Valid options: ${validValues.join(', ')}`);
+          }
         }
       }
       break;
