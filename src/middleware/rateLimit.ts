@@ -115,10 +115,15 @@ class RateLimiter {
   }
 }
 
+// Track if we've logged the IP warning to avoid spam
+let hasLoggedIpWarning = false;
+
 /**
  * Extract client IP from request
+ * @param request The HTTP request
+ * @param context Optional Elysia context that might contain connection info
  */
-function getClientIP(request: Request): string {
+function getClientIP(request: Request, context?: any): string {
   // Check common headers for real IP (behind proxy)
   const xForwardedFor = request.headers.get('x-forwarded-for');
   if (xForwardedFor) {
@@ -130,7 +135,31 @@ function getClientIP(request: Request): string {
     return xRealIP;
   }
 
-  // Fallback - note: this won't work in serverless environments
+  // Try to get IP from Elysia context if available
+  // Check various possible property names
+  if (context?.ip) {
+    return context.ip;
+  }
+  if (context?.request?.ip) {
+    return context.request.ip;
+  }
+  if (context?.set?.ip) {
+    return context.set.ip;
+  }
+
+  // Fallback to 'unknown' for test environments and direct connections
+  // Log warning once to alert operators
+  if (!hasLoggedIpWarning) {
+    logger.warn(
+      'Rate limiting is using fallback IP detection. ' +
+      'For production deployments without a proxy, consider: ' +
+      '(1) deploying behind a proxy that sets x-forwarded-for headers, or ' +
+      '(2) setting RATE_LIMIT_ENABLED=false to disable rate limiting. ' +
+      'Without proper IP detection, all requests share a single rate limit bucket.'
+    );
+    hasLoggedIpWarning = true;
+  }
+
   return 'unknown';
 }
 
@@ -141,7 +170,7 @@ export function createRateLimitMiddleware(config: RateLimitConfig) {
   const limiter = new RateLimiter(config);
 
   return async (request: Request, next: () => Promise<Response>): Promise<Response> => {
-    const clientIP = getClientIP(request);
+    const clientIP = getClientIP(request, undefined);
     const result = limiter.isRateLimited(clientIP);
 
     if (result.limited) {
@@ -198,8 +227,9 @@ export function rateLimitPlugin(config: RateLimitConfig): {
   const limiter = new RateLimiter(config);
 
   const plugin = (app: Elysia): any => {
-    return app.onBeforeHandle(async ({ request, set }) => {
-      const clientIP = getClientIP(request);
+    return app.onBeforeHandle(async (context) => {
+      const { request, set } = context;
+      const clientIP = getClientIP(request, context);
       const result = limiter.isRateLimited(clientIP);
 
       if (result.limited) {

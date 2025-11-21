@@ -43,21 +43,60 @@ paths:
       operationId: getHealth
       responses:
         '200':
-          description: API is healthy
+          description: API is healthy or degraded
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    enum: [ok]
-                  timestamp:
-                    type: string
-                    format: date-time
+                $ref: '#/components/schemas/HealthStatus'
+              examples:
+                healthy:
+                  summary: System is healthy
+                  value:
+                    status: healthy
+                    timestamp: "2025-01-20T12:00:00.000Z"
+                    uptime: 3600
+                    checks:
+                      mapeoBuilder:
+                        status: pass
+                        message: "mapeo-settings-builder is available"
+                      diskSpace:
+                        status: pass
+                        message: "Sufficient disk space available"
+                      tempDirectory:
+                        status: pass
+                        message: "Temp directory is writable"
+                degraded:
+                  summary: System is degraded but functional
+                  value:
+                    status: degraded
+                    timestamp: "2025-01-20T12:00:00.000Z"
+                    uptime: 3600
+                    checks:
+                      mapeoBuilder:
+                        status: pass
+                      diskSpace:
+                        status: warn
+                        message: "Low disk space"
+                      tempDirectory:
+                        status: pass
+        '503':
+          description: API is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
               example:
-                status: ok
+                status: unhealthy
                 timestamp: "2025-01-20T12:00:00.000Z"
+                uptime: 3600
+                checks:
+                  mapeoBuilder:
+                    status: fail
+                    message: "mapeo-settings-builder not found"
+                  diskSpace:
+                    status: pass
+                  tempDirectory:
+                    status: pass
 
   /build:
     post:
@@ -446,3 +485,71 @@ components:
         retryAfter:
           type: integer
           description: Seconds to wait before retrying (for rate limit errors)
+
+    HealthStatus:
+      type: object
+      required:
+        - status
+        - timestamp
+        - uptime
+        - checks
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          description: Overall health status
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp when check was performed
+        uptime:
+          type: number
+          description: Server uptime in seconds
+        checks:
+          type: object
+          required:
+            - mapeoBuilder
+            - diskSpace
+            - tempDirectory
+          properties:
+            mapeoBuilder:
+              $ref: '#/components/schemas/HealthCheck'
+            diskSpace:
+              $ref: '#/components/schemas/HealthCheck'
+            tempDirectory:
+              $ref: '#/components/schemas/HealthCheck'
+        details:
+          type: object
+          description: Additional system details (only in /health/detailed)
+          properties:
+            nodeVersion:
+              type: string
+            platform:
+              type: string
+            memoryUsage:
+              type: object
+              properties:
+                heapUsed:
+                  type: number
+                heapTotal:
+                  type: number
+                external:
+                  type: number
+                rss:
+                  type: number
+
+    HealthCheck:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [pass, warn, fail]
+          description: Check result status
+        message:
+          type: string
+          description: Human-readable message
+        details:
+          type: object
+          description: Additional check-specific details
