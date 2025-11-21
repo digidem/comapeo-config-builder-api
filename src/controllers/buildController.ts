@@ -15,6 +15,49 @@ const MAX_JSON_SIZE = 10 * 1024 * 1024; // 10MB for JSON
 const MAX_ZIP_SIZE = 50 * 1024 * 1024; // 50MB for ZIP
 
 /**
+ * Read request body with size limit enforcement
+ * Prevents unbounded memory usage from chunked/unlimited requests
+ */
+async function readLimitedBody(request: Request, maxSize: number): Promise<ArrayBuffer> {
+  const reader = request.body?.getReader();
+  if (!reader) {
+    throw new Error('No request body');
+  }
+
+  const chunks: Uint8Array[] = [];
+  let totalSize = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      totalSize += value.length;
+      if (totalSize > maxSize) {
+        reader.cancel();
+        const error = new Error(`Request body size exceeds maximum ${maxSize} bytes`);
+        error.name = 'PayloadTooLarge';
+        throw error;
+      }
+
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  // Combine chunks into single ArrayBuffer
+  const combined = new Uint8Array(totalSize);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return combined.buffer;
+}
+
+/**
  * Handle POST /build request
  * Supports both JSON mode and legacy ZIP mode
  */
@@ -29,7 +72,7 @@ export async function handleBuild(request: Request): Promise<Response> {
   // Apply appropriate size limit based on content type
   const maxSize = isJSONMode ? MAX_JSON_SIZE : MAX_ZIP_SIZE;
 
-  // Check content-length header for size limits
+  // Early rejection if Content-Length header indicates oversized body
   const contentLength = request.headers.get('content-length');
   if (contentLength) {
     const size = parseInt(contentLength, 10);
@@ -44,11 +87,11 @@ export async function handleBuild(request: Request): Promise<Response> {
 
   try {
     if (isJSONMode) {
-      // JSON mode
-      return await handleJSONMode(request);
+      // JSON mode - read body with size limit then parse
+      return await handleJSONMode(request, maxSize);
     } else if (isZIPMode) {
-      // Legacy ZIP mode
-      return await handleZIPMode(request);
+      // Legacy ZIP mode - read body with size limit then parse
+      return await handleZIPMode(request, maxSize);
     } else {
       // Unknown mode
       return createErrorResponse(
@@ -58,6 +101,15 @@ export async function handleBuild(request: Request): Promise<Response> {
       );
     }
   } catch (error) {
+    // Handle size limit errors
+    if (error instanceof Error && error.name === 'PayloadTooLarge') {
+      return createErrorResponse(
+        'PayloadTooLarge',
+        error.message,
+        413
+      );
+    }
+
     logger.error('Error in handleBuild', {
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined
@@ -84,16 +136,22 @@ export async function handleBuild(request: Request): Promise<Response> {
 /**
  * Handle JSON mode request
  */
-async function handleJSONMode(request: Request): Promise<Response> {
+async function handleJSONMode(request: Request, maxSize: number): Promise<Response> {
   logger.info('Processing JSON mode request', { mode: 'json' });
 
   const buildStartTime = Date.now();
 
-  // Parse JSON body
+  // Read body with size limit enforcement, then parse JSON
   let buildRequest: BuildRequest;
   try {
-    buildRequest = await request.json() as BuildRequest;
+    const bodyBuffer = await readLimitedBody(request, maxSize);
+    const bodyText = new TextDecoder().decode(bodyBuffer);
+    buildRequest = JSON.parse(bodyText) as BuildRequest;
   } catch (error) {
+    // Re-throw size limit errors to be handled by caller
+    if (error instanceof Error && error.name === 'PayloadTooLarge') {
+      throw error;
+    }
     return createErrorResponse(
       'InvalidJSON',
       'Invalid JSON in request body',
@@ -174,10 +232,11 @@ async function handleJSONMode(request: Request): Promise<Response> {
 /**
  * Handle legacy ZIP mode request
  */
-async function handleZIPMode(request: Request): Promise<Response> {
+async function handleZIPMode(request: Request, maxSize: number): Promise<Response> {
   logger.info('Processing legacy ZIP mode request', { mode: 'zip', deprecated: true });
 
   // Parse multipart form data
+  // Note: formData() buffers the body; Content-Length pre-check helps but isn't foolproof
   let formData: FormData;
   try {
     formData = await request.formData();
@@ -195,6 +254,15 @@ async function handleZIPMode(request: Request): Promise<Response> {
       'MissingFile',
       'No file provided in the request body',
       400
+    );
+  }
+
+  // Enforce size limit on the actual file (catches chunked uploads)
+  if (file.size > maxSize) {
+    return createErrorResponse(
+      'PayloadTooLarge',
+      `File size ${file.size} bytes exceeds maximum ${maxSize} bytes`,
+      413
     );
   }
 
