@@ -139,7 +139,21 @@ export function checkTimeout(request: Request, startTime: number, timeoutMs: num
 
 // Default timeout configuration
 // 5 minutes (300,000ms) for entire request lifecycle
+const DEFAULT_TIMEOUT_MS = 300000;
+
+function parseTimeoutMs(): number {
+  const envValue = process.env.REQUEST_TIMEOUT_MS;
+  if (!envValue) {
+    return DEFAULT_TIMEOUT_MS;
+  }
+  const parsed = parseInt(envValue, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return DEFAULT_TIMEOUT_MS;
+  }
+  return parsed;
+}
+
 export const defaultTimeoutConfig: TimeoutConfig = {
-  timeoutMs: parseInt(process.env.REQUEST_TIMEOUT_MS || '300000', 10),
+  timeoutMs: parseTimeoutMs(),
   message: 'Request timeout - processing took too long'
 };
