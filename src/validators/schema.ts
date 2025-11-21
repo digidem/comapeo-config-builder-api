@@ -115,7 +115,20 @@ function validateMetadata(request: BuildRequest, errors: string[]): void {
  * Validates icons
  */
 function validateIcons(icons: Icon[], errors: string[], iconIds: Set<string>): void {
-  for (const icon of icons) {
+  for (let i = 0; i < icons.length; i++) {
+    const icon = icons[i];
+
+    // Validate required fields exist and are correct types
+    if (!icon || typeof icon !== 'object') {
+      errors.push(`Icon at index ${i} must be an object`);
+      continue;
+    }
+
+    if (typeof icon.id !== 'string' || icon.id.trim() === '') {
+      errors.push(`Icon at index ${i} must have a non-empty string 'id'`);
+      continue; // Skip further validation for this icon
+    }
+
     // Check for duplicate IDs
     if (iconIds.has(icon.id)) {
       errors.push(`duplicate icon ID: ${icon.id}`);
@@ -161,7 +174,24 @@ function validateCategories(
   iconIds: Set<string>,
   fieldIds: Set<string>
 ): void {
-  for (const category of categories) {
+  for (let i = 0; i < categories.length; i++) {
+    const category = categories[i];
+
+    // Validate required fields exist and are correct types
+    if (!category || typeof category !== 'object') {
+      errors.push(`Category at index ${i} must be an object`);
+      continue;
+    }
+
+    if (typeof category.id !== 'string' || category.id.trim() === '') {
+      errors.push(`Category at index ${i} must have a non-empty string 'id'`);
+      continue; // Skip further validation for this category
+    }
+
+    if (typeof category.name !== 'string' || category.name.trim() === '') {
+      errors.push(`Category '${category.id}' must have a non-empty string 'name'`);
+    }
+
     // Check for duplicate IDs
     if (categoryIds.has(category.id)) {
       errors.push(`duplicate category ID: ${category.id}`);
@@ -242,13 +272,36 @@ function hasCircularReference(
 /**
  * Validates fields
  */
+const VALID_FIELD_TYPES = ['text', 'textarea', 'number', 'integer', 'boolean', 'select', 'multiselect', 'date', 'datetime', 'photo', 'location'];
+
 function validateFields(
   fields: Field[],
   errors: string[],
   fieldIds: Set<string>,
   iconIds: Set<string>
 ): void {
-  for (const field of fields) {
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+
+    // Validate required fields exist and are correct types
+    if (!field || typeof field !== 'object') {
+      errors.push(`Field at index ${i} must be an object`);
+      continue;
+    }
+
+    if (typeof field.id !== 'string' || field.id.trim() === '') {
+      errors.push(`Field at index ${i} must have a non-empty string 'id'`);
+      continue; // Skip further validation for this field
+    }
+
+    if (typeof field.name !== 'string' || field.name.trim() === '') {
+      errors.push(`Field '${field.id}' must have a non-empty string 'name'`);
+    }
+
+    if (typeof field.type !== 'string' || !VALID_FIELD_TYPES.includes(field.type)) {
+      errors.push(`Field '${field.id}' must have a valid 'type' (one of: ${VALID_FIELD_TYPES.join(', ')})`);
+    }
+
     // Check for duplicate IDs
     if (fieldIds.has(field.id)) {
       errors.push(`duplicate field ID: ${field.id}`);
