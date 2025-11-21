@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { cors } from "@elysiajs/cors";
 import { handleBuildSettings } from './controllers/settingsController';
 import { handleBuild } from './controllers/buildController';
+import { handleHealthCheck, handleDetailedHealthCheck } from './controllers/healthController';
 import { rateLimitPlugin, defaultRateLimitConfig, type RateLimiter } from './middleware/rateLimit';
 import { withTimeout, defaultTimeoutConfig } from './middleware/timeout';
 
@@ -26,11 +27,14 @@ export function createApp(): AppContext {
     rateLimiter = limiter;
   }
 
-  // Health check endpoint (no timeout needed)
-  app.get('/health', () => ({
-    status: 'ok',
-    timestamp: new Date().toISOString()
-  }));
+  // Health check endpoints (no timeout or rate limiting needed)
+  app.get('/health', async () => {
+    return handleHealthCheck();
+  });
+
+  app.get('/health/detailed', async () => {
+    return handleDetailedHealthCheck();
+  });
 
   // v2.0.0 Build endpoint - supports both JSON and ZIP modes
   // Wrapped with timeout protection (5 minutes default)

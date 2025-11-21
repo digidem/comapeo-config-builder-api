@@ -157,9 +157,13 @@ describe('Rate Limit Integration Tests', () => {
     it('should work with actual app endpoints', async () => {
       const { app, rateLimiter } = createApp();
 
-      // Health check should have rate limiting if enabled
+      // Health check should work (may return 200 or 503 depending on mapeo-settings-builder availability)
       const response = await app.handle(new Request('http://localhost/health'));
-      expect(response.status).toBe(200);
+      expect([200, 503]).toContain(response.status);
+
+      const body = await response.json();
+      expect(body.status).toBeDefined();
+      expect(['healthy', 'degraded', 'unhealthy']).toContain(body.status);
 
       // Should have rate limit headers (if rate limiting is enabled)
       const rateLimitEnabled = process.env.RATE_LIMIT_ENABLED !== 'false';
