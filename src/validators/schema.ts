@@ -136,9 +136,17 @@ function validateIcons(icons: Icon[], errors: string[], iconIds: Set<string>): v
       iconIds.add(icon.id);
     }
 
-    // Validate svgData or svgUrl (exactly one must be present)
-    const hasSvgData = icon.svgData !== undefined && icon.svgData !== null && icon.svgData !== '';
-    const hasSvgUrl = icon.svgUrl !== undefined && icon.svgUrl !== null && icon.svgUrl !== '';
+    // Validate svgData or svgUrl (exactly one must be present, must be string)
+    const hasSvgData = typeof icon.svgData === 'string' && icon.svgData !== '';
+    const hasSvgUrl = typeof icon.svgUrl === 'string' && icon.svgUrl !== '';
+
+    // Check for wrong types
+    if (icon.svgData !== undefined && icon.svgData !== null && typeof icon.svgData !== 'string') {
+      errors.push(`Icon ${icon.id} svgData must be a string`);
+    }
+    if (icon.svgUrl !== undefined && icon.svgUrl !== null && typeof icon.svgUrl !== 'string') {
+      errors.push(`Icon ${icon.id} svgUrl must be a string`);
+    }
 
     if (!hasSvgData && !hasSvgUrl) {
       errors.push(`Icon ${icon.id} must have either svgData or svgUrl`);
@@ -146,17 +154,17 @@ function validateIcons(icons: Icon[], errors: string[], iconIds: Set<string>): v
       errors.push(`Icon ${icon.id} cannot have both svgData and svgUrl`);
     }
 
-    // Validate svgData format if present
+    // Validate svgData format if present (only if it's a string)
     if (hasSvgData) {
-      const svgCheck = isValidSvgStructure(icon.svgData!);
+      const svgCheck = isValidSvgStructure(icon.svgData);
       if (!svgCheck.valid) {
         errors.push(`Icon ${icon.id} has invalid SVG data: ${svgCheck.error}`);
       }
     }
 
-    // Validate svgUrl format if present
+    // Validate svgUrl format if present (only if it's a string)
     if (hasSvgUrl) {
-      const urlCheck = validateIconUrl(icon.svgUrl!);
+      const urlCheck = validateIconUrl(icon.svgUrl);
       if (!urlCheck.valid) {
         errors.push(`Icon ${icon.id} has invalid or unsafe URL: ${urlCheck.error}`);
       }
