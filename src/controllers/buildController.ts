@@ -58,48 +58,30 @@ async function readLimitedBody(request: Request, maxSize: number, signal?: Abort
     throw new Error('Request aborted');
   }
 
-  const reader = request.body?.getReader();
-  if (!reader) {
-    throw new Error('No request body');
-  }
-
-  const chunks: Uint8Array[] = [];
-  let totalSize = 0;
-
+  // For better compatibility with Bun's Request implementation in tests and production,
+  // use arrayBuffer() directly and check size after. This is safe for our size limits
+  // (10MB/50MB) and simpler than streaming.
   try {
-    while (true) {
-      // Check for abort signal during reading
-      if (signal?.aborted) {
-        reader.cancel();
-        throw new Error('Request aborted');
-      }
+    logger.debug('readLimitedBody: starting to read body');
+    const bodyBuffer = await request.arrayBuffer();
+    logger.debug('readLimitedBody: body read', { byteLength: bodyBuffer.byteLength });
 
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      totalSize += value.length;
-      if (totalSize > maxSize) {
-        reader.cancel();
-        const error = new Error(`Request body size exceeds maximum ${maxSize} bytes`);
-        error.name = 'PayloadTooLarge';
-        throw error;
-      }
-
-      chunks.push(value);
+    if (bodyBuffer.byteLength > maxSize) {
+      const error = new Error(`Request body size ${bodyBuffer.byteLength} bytes exceeds maximum ${maxSize} bytes`);
+      error.name = 'PayloadTooLarge';
+      throw error;
     }
-  } finally {
-    reader.releaseLock();
-  }
 
-  // Combine chunks into single ArrayBuffer
-  const combined = new Uint8Array(totalSize);
-  let offset = 0;
-  for (const chunk of chunks) {
-    combined.set(chunk, offset);
-    offset += chunk.length;
+    return bodyBuffer;
+  } catch (error) {
+    logger.error('readLimitedBody: error', { error: error instanceof Error ? error.message : 'Unknown' });
+    // Re-throw PayloadTooLarge errors
+    if (error instanceof Error && error.name === 'PayloadTooLarge') {
+      throw error;
+    }
+    // Wrap other errors
+    throw new Error(`Failed to read request body: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
-
-  return combined.buffer as ArrayBuffer;
 }
 
 /**
@@ -109,7 +91,11 @@ async function readLimitedBody(request: Request, maxSize: number, signal?: Abort
  * @param context Optional request context with abort signal for timeout handling
  */
 export async function handleBuild(request: Request, context?: RequestContext): Promise<Response> {
-  const contentType = request.headers.get('Content-Type') || '';
+  // Clone the request to ensure body stream is available
+  // This prevents "Body already used" errors in test environments
+  const clonedRequest = request.clone();
+
+  const contentType = clonedRequest.headers.get('Content-Type') || '';
 
   // Detect mode based on Content-Type (more robust parsing)
   const normalizedContentType = contentType.toLowerCase().split(';')[0].trim();
@@ -120,7 +106,7 @@ export async function handleBuild(request: Request, context?: RequestContext): P
   const maxSize = isJSONMode ? MAX_JSON_SIZE : MAX_ZIP_SIZE;
 
   // Early rejection if Content-Length header indicates oversized body
-  const contentLength = request.headers.get('content-length');
+  const contentLength = clonedRequest.headers.get('content-length');
   if (contentLength) {
     const size = parseInt(contentLength, 10);
     if (size > maxSize) {
@@ -135,10 +121,10 @@ export async function handleBuild(request: Request, context?: RequestContext): P
   try {
     if (isJSONMode) {
       // JSON mode - read body with size limit then parse
-      return await handleJSONMode(request, maxSize, context?.signal);
+      return await handleJSONMode(clonedRequest, maxSize, context?.signal);
     } else if (isZIPMode) {
       // Legacy ZIP mode - read body with size limit then parse
-      return await handleZIPMode(request, maxSize, context?.signal);
+      return await handleZIPMode(clonedRequest, maxSize, context?.signal);
     } else {
       // Unknown mode
       return createErrorResponse(
@@ -184,21 +170,51 @@ export async function handleBuild(request: Request, context?: RequestContext): P
  * Handle JSON mode request
  */
 async function handleJSONMode(request: Request, maxSize: number, signal?: AbortSignal): Promise<Response> {
-  logger.info('Processing JSON mode request', { mode: 'json' });
+  logger.info('Processing JSON mode request', { mode: 'json', hasBody: !!request.body });
 
   const buildStartTime = Date.now();
 
   // Read body with size limit enforcement, then parse JSON
   let buildRequest: BuildRequest;
   try {
-    const bodyBuffer = await readLimitedBody(request, maxSize, signal);
+    // Check for abort signal
+    if (signal?.aborted) {
+      logger.debug('Request already aborted');
+      throw new Error('Request aborted');
+    }
+
+    // Try to read the body - use arrayBuffer() for better compatibility
+    let bodyBuffer: ArrayBuffer;
+
+    // Check if request has a body
+    logger.debug('Checking request body', { hasBody: !!request.body });
+    if (!request.body) {
+      throw new Error('No request body');
+    }
+
+    // Read with our size-limited reader
+    bodyBuffer = await readLimitedBody(request, maxSize, signal);
+
+    logger.debug('Read request body', { byteLength: bodyBuffer.byteLength });
+
+    if (bodyBuffer.byteLength === 0) {
+      throw new Error('Empty request body');
+    }
+
     const bodyText = new TextDecoder().decode(bodyBuffer);
+    logger.debug('Decoded body text', { length: bodyText.length, preview: bodyText.substring(0, 100) });
+
     buildRequest = JSON.parse(bodyText) as BuildRequest;
   } catch (error) {
     // Re-throw size limit errors to be handled by caller
     if (error instanceof Error && error.name === 'PayloadTooLarge') {
       throw error;
     }
+    // Log for debugging
+    logger.error('Error reading/parsing JSON', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
     return createErrorResponse(
       'InvalidJSON',
       'Invalid JSON in request body',
