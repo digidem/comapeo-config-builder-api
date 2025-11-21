@@ -98,6 +98,143 @@ paths:
                   tempDirectory:
                     status: pass
 
+  /health/detailed:
+    get:
+      tags:
+        - health
+      summary: Detailed health check
+      description: Returns detailed health status including system information
+      operationId: getDetailedHealth
+      responses:
+        '200':
+          description: API is healthy or degraded (with system details)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              example:
+                status: healthy
+                timestamp: "2025-01-20T12:00:00.000Z"
+                uptime: 3600
+                checks:
+                  mapeoBuilder:
+                    status: pass
+                    message: "mapeo-settings-builder is available"
+                    details:
+                      version: "6.0.0"
+                  diskSpace:
+                    status: pass
+                    message: "Sufficient disk space available"
+                  tempDirectory:
+                    status: pass
+                    message: "Temp directory is writable"
+                details:
+                  nodeVersion: "v20.0.0"
+                  platform: "linux"
+                  memoryUsage:
+                    heapUsed: 45000000
+                    heapTotal: 80000000
+                    external: 2000000
+                    rss: 100000000
+        '503':
+          description: API is unhealthy (with system details)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /metrics:
+    get:
+      tags:
+        - health
+      summary: Prometheus metrics
+      description: Returns Prometheus-format metrics for monitoring
+      operationId: getMetrics
+      responses:
+        '200':
+          description: Metrics in Prometheus text format
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: |
+                # HELP build_operations_total Total number of build operations
+                # TYPE build_operations_total counter
+                build_operations_total{status="success"} 150
+                build_operations_total{status="failure"} 5
+                build_operations_total{status="validation_error"} 12
+
+                # HELP build_duration_seconds Build operation duration
+                # TYPE build_duration_seconds summary
+                build_duration_seconds{quantile="0.5"} 2.3
+                build_duration_seconds{quantile="0.9"} 5.1
+                build_duration_seconds{quantile="0.99"} 12.8
+
+                # HELP rate_limit_hits_total Number of requests blocked by rate limiting
+                # TYPE rate_limit_hits_total counter
+                rate_limit_hits_total 8
+
+  /:
+    post:
+      tags:
+        - build
+      summary: Legacy build endpoint (deprecated)
+      description: |
+        **DEPRECATED**: This endpoint is maintained for backward compatibility only.
+        Please use POST /build with multipart/form-data instead.
+
+        Will be removed in v3.0.0 (January 2026).
+      operationId: buildConfigLegacy
+      deprecated: true
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: ZIP file containing configuration
+              required:
+                - file
+      responses:
+        '200':
+          description: Successfully built configuration file
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: 'attachment; filename="config.comapeocat"'
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                  message:
+                    type: string
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                  message:
+                    type: string
+
   /build:
     post:
       tags:
