@@ -17,12 +17,17 @@ export interface BuildResult {
   cleanup: () => Promise<void>;
 }
 
+export interface BuildOptions {
+  signal?: AbortSignal;
+}
+
 /**
  * Build a .comapeocat file from a JSON mode request
  * @param request The BuildRequest payload
+ * @param options Optional build settings including abort signal
  * @returns The path to the built .comapeocat file and cleanup function
  */
-export async function buildFromJSON(request: BuildRequest): Promise<BuildResult> {
+export async function buildFromJSON(request: BuildRequest, options?: BuildOptions): Promise<BuildResult> {
   // Create a temporary directory for the workspace
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), config.tempDirPrefix));
   logger.info('Temporary directory created for JSON build', { tmpDir, mode: 'json' });
@@ -62,9 +67,13 @@ export async function buildFromJSON(request: BuildRequest): Promise<BuildResult>
 
     // Await the CLI execution to catch errors and ensure cleanup runs deterministically
     try {
-      await runShellCommand(`mapeo-settings-builder build ${tmpDir} -o ${buildPath}`);
+      await runShellCommand(`mapeo-settings-builder build ${tmpDir} -o ${buildPath}`, { signal: options?.signal });
     } catch (cliError) {
       const errorMessage = cliError instanceof Error ? cliError.message : String(cliError);
+      // Re-throw abort errors without logging as failures
+      if (errorMessage === 'Command aborted') {
+        throw cliError;
+      }
       logger.error('mapeo-settings-builder failed', { error: errorMessage, tmpDir, buildPath });
       throw new Error(`Build CLI failed: ${errorMessage}`);
     }

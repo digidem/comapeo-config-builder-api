@@ -1,6 +1,7 @@
 /**
  * Request timeout middleware
  * Prevents requests from running indefinitely and consuming resources
+ * Uses AbortController to actually cancel in-flight operations
  */
 
 import { logger } from '../utils/logger';
@@ -8,6 +9,12 @@ import { logger } from '../utils/logger';
 interface TimeoutConfig {
   timeoutMs: number;  // Timeout in milliseconds
   message?: string;   // Custom timeout message
+}
+
+export interface RequestContext {
+  signal: AbortSignal;
+  startTime: number;
+  timeoutMs: number;
 }
 
 /**
@@ -32,17 +39,25 @@ function createTimeoutResponse(config: TimeoutConfig, elapsed: number): Response
 
 /**
  * Wrap a request handler with timeout protection
- * Uses Promise.race() to enforce timeout
+ * Uses AbortController to cancel in-flight operations when timeout occurs
  */
 export function withTimeout(
-  handler: (request: Request) => Promise<Response>,
+  handler: (request: Request, context: RequestContext) => Promise<Response>,
   config: TimeoutConfig
 ): (request: Request) => Promise<Response> {
   return async (request: Request): Promise<Response> => {
     const startTime = Date.now();
+    const controller = new AbortController();
     let timeoutId: Timer | null = null;
 
-    // Create timeout promise
+    // Create context with abort signal for handler
+    const context: RequestContext = {
+      signal: controller.signal,
+      startTime,
+      timeoutMs: config.timeoutMs
+    };
+
+    // Create timeout promise that also aborts the controller
     const timeoutPromise = new Promise<Response>((resolve) => {
       timeoutId = setTimeout(() => {
         const elapsed = Date.now() - startTime;
@@ -52,6 +67,8 @@ export function withTimeout(
           timeoutMs: config.timeoutMs,
           elapsedMs: elapsed
         });
+        // Abort all operations using this signal
+        controller.abort();
         resolve(createTimeoutResponse(config, elapsed));
       }, config.timeoutMs);
     });
@@ -59,7 +76,7 @@ export function withTimeout(
     // Race the handler against the timeout
     try {
       const response = await Promise.race([
-        handler(request),
+        handler(request, context),
         timeoutPromise
       ]);
 
@@ -73,6 +90,11 @@ export function withTimeout(
       // Clear timeout on error
       if (timeoutId !== null) {
         clearTimeout(timeoutId);
+      }
+
+      // Don't log abort errors as handler errors
+      if (error instanceof Error && error.message === 'Command aborted') {
+        return createTimeoutResponse(config, Date.now() - startTime);
       }
 
       logger.error('Request handler error', {

@@ -9,6 +9,7 @@ import { buildFromJSON } from '../services/jsonBuilder';
 import { buildSettings } from '../services/settingsBuilder';
 import { logger } from '../utils/logger';
 import { metrics } from './metricsController';
+import type { RequestContext } from '../middleware/timeout';
 
 // Request size limits
 const MAX_JSON_SIZE = 10 * 1024 * 1024; // 10MB for JSON
@@ -60,8 +61,10 @@ async function readLimitedBody(request: Request, maxSize: number): Promise<Array
 /**
  * Handle POST /build request
  * Supports both JSON mode and legacy ZIP mode
+ * @param request The HTTP request
+ * @param context Optional request context with abort signal for timeout handling
  */
-export async function handleBuild(request: Request): Promise<Response> {
+export async function handleBuild(request: Request, context?: RequestContext): Promise<Response> {
   const contentType = request.headers.get('Content-Type') || '';
 
   // Detect mode based on Content-Type (more robust parsing)
@@ -88,10 +91,10 @@ export async function handleBuild(request: Request): Promise<Response> {
   try {
     if (isJSONMode) {
       // JSON mode - read body with size limit then parse
-      return await handleJSONMode(request, maxSize);
+      return await handleJSONMode(request, maxSize, context?.signal);
     } else if (isZIPMode) {
       // Legacy ZIP mode - read body with size limit then parse
-      return await handleZIPMode(request, maxSize);
+      return await handleZIPMode(request, maxSize, context?.signal);
     } else {
       // Unknown mode
       return createErrorResponse(
@@ -136,7 +139,7 @@ export async function handleBuild(request: Request): Promise<Response> {
 /**
  * Handle JSON mode request
  */
-async function handleJSONMode(request: Request, maxSize: number): Promise<Response> {
+async function handleJSONMode(request: Request, maxSize: number, signal?: AbortSignal): Promise<Response> {
   logger.info('Processing JSON mode request', { mode: 'json' });
 
   const buildStartTime = Date.now();
@@ -176,7 +179,7 @@ async function handleJSONMode(request: Request, maxSize: number): Promise<Respon
   // Build the .comapeocat file
   let cleanup: (() => Promise<void>) | undefined;
   try {
-    const buildResult = await buildFromJSON(buildRequest);
+    const buildResult = await buildFromJSON(buildRequest, { signal });
     cleanup = buildResult.cleanup;
 
     // Read the file and return it
@@ -232,7 +235,7 @@ async function handleJSONMode(request: Request, maxSize: number): Promise<Respon
 /**
  * Handle legacy ZIP mode request
  */
-async function handleZIPMode(request: Request, maxSize: number): Promise<Response> {
+async function handleZIPMode(request: Request, maxSize: number, _signal?: AbortSignal): Promise<Response> {
   logger.info('Processing legacy ZIP mode request', { mode: 'zip', deprecated: true });
 
   // Parse multipart form data
