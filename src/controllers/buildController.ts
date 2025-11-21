@@ -332,11 +332,11 @@ async function handleZIPMode(request: Request, maxSize: number, signal?: AbortSi
     );
   }
 
-  const file = formData.get('file') as File | null;
-  if (!file) {
+  const file = formData.get('file');
+  if (!file || !(file instanceof File)) {
     return createErrorResponse(
-      'MissingFile',
-      'No file provided in the request body',
+      'InvalidFile',
+      'Field "file" must be a file upload, not a text value',
       400
     );
   }
