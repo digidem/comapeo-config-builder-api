@@ -2,42 +2,57 @@ import { Elysia, t } from 'elysia';
 import { cors } from "@elysiajs/cors";
 import { handleBuildSettings } from './controllers/settingsController';
 import { handleBuild } from './controllers/buildController';
-import { rateLimitPlugin, defaultRateLimitConfig } from './middleware/rateLimit';
+import { rateLimitPlugin, defaultRateLimitConfig, type RateLimiter } from './middleware/rateLimit';
+import { withTimeout, defaultTimeoutConfig } from './middleware/timeout';
+
+export interface AppContext {
+  app: Elysia;
+  rateLimiter: RateLimiter | null;
+}
 
 /**
  * Create and configure the Elysia application
- * @returns The configured Elysia application
+ * @returns The configured Elysia application and rate limiter instance
  */
-export function createApp() {
+export function createApp(): AppContext {
   const app = new Elysia().use(cors());
+  let rateLimiter: RateLimiter | null = null;
 
   // Add rate limiting if enabled (default: enabled in production)
   const rateLimitEnabled = process.env.RATE_LIMIT_ENABLED !== 'false';
   if (rateLimitEnabled) {
-    app.use(rateLimitPlugin(defaultRateLimitConfig));
+    const { plugin, limiter } = rateLimitPlugin(defaultRateLimitConfig);
+    app.use(plugin);
+    rateLimiter = limiter;
   }
 
-  // Health check endpoint
+  // Health check endpoint (no timeout needed)
   app.get('/health', () => ({
     status: 'ok',
     timestamp: new Date().toISOString()
   }));
 
   // v2.0.0 Build endpoint - supports both JSON and ZIP modes
+  // Wrapped with timeout protection (5 minutes default)
+  const handleBuildWithTimeout = withTimeout(handleBuild, defaultTimeoutConfig);
   app.post('/build', async ({ request }: { request: Request }) => {
-    return handleBuild(request);
+    return handleBuildWithTimeout(request);
   });
 
   // Legacy endpoint (kept for backward compatibility)
+  // Also wrapped with timeout protection
   app.post('/', async ({ body }: any) => {
-    return handleBuildSettings(body.file);
+    return withTimeout(
+      async () => handleBuildSettings(body.file),
+      defaultTimeoutConfig
+    )(new Request('http://localhost/'));
   }, {
     body: t.Object({
       file: t.File()
     })
   });
 
-  return app;
+  return { app, rateLimiter };
 }
 
-export type App = ReturnType<typeof createApp>;
+export type App = ReturnType<typeof createApp>['app'];

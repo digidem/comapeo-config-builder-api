@@ -1,5 +1,6 @@
 /**
  * SVG sanitization utilities to prevent XSS attacks
+ * Enhanced with more robust patterns and encoding handling
  */
 
 // Dangerous tags that should be removed from SVG
@@ -10,60 +11,70 @@ const DANGEROUS_TAGS = [
   'embed',
   'foreignObject',
   'use', // Can reference external resources
+  'image', // Can reference external resources
+  'feImage', // Can reference external resources
+  'animation',
+  'animate',
+  'animateTransform',
+  'set',
 ];
 
 // Dangerous attributes that can execute JavaScript
+// Note: This list is comprehensive to catch variations
 const DANGEROUS_ATTRIBUTES = [
-  'onload',
-  'onerror',
-  'onclick',
-  'onmouseover',
-  'onmouseout',
-  'onmousemove',
-  'onmouseenter',
-  'onmouseleave',
-  'onfocus',
-  'onblur',
-  'onchange',
-  'oninput',
-  'onsubmit',
-  'onkeydown',
-  'onkeyup',
-  'onkeypress',
+  'onload', 'onerror', 'onclick', 'onmouseover', 'onmouseout',
+  'onmousemove', 'onmouseenter', 'onmouseleave', 'onmousedown', 'onmouseup',
+  'onfocus', 'onblur', 'onchange', 'oninput', 'onsubmit',
+  'onkeydown', 'onkeyup', 'onkeypress',
+  'onabort', 'onbegin', 'onend', 'onrepeat',
+  'onactivate', 'onfocusin', 'onfocusout',
+  'onscroll', 'onresize', 'onzoom',
 ];
 
 /**
- * Basic SVG sanitization to remove potentially dangerous content
- * This is a simple implementation - for production, consider using a library like DOMPurify
+ * Enhanced SVG sanitization to remove potentially dangerous content
+ * Handles case variations, encoded characters, and multiple attack vectors
  */
 export function sanitizeSvg(svgContent: string): string {
   let sanitized = svgContent;
 
-  // Remove XML declarations and DOCTYPE
+  // Remove XML declarations and DOCTYPE (XXE prevention)
   sanitized = sanitized.replace(/<\?xml[^?]*\?>/gi, '');
   sanitized = sanitized.replace(/<!DOCTYPE[^>]*>/gi, '');
+  sanitized = sanitized.replace(/<!ENTITY[^>]*>/gi, '');
 
-  // Remove dangerous tags
+  // Decode common HTML entities to catch encoded attacks
+  sanitized = decodeHtmlEntities(sanitized);
+
+  // Remove CDATA sections that might contain scripts
+  sanitized = sanitized.replace(/<!\[CDATA\[[\s\S]*?\]\]>/gi, '');
+
+  // Remove dangerous tags (case-insensitive, handles variations)
   for (const tag of DANGEROUS_TAGS) {
-    const regex = new RegExp(`<${tag}[^>]*>.*?</${tag}>`, 'gis');
+    // Match opening and closing tags (with or without attributes)
+    const regex = new RegExp(`<${tag}(\\s[^>]*)?>.*?</${tag}>`, 'gis');
     sanitized = sanitized.replace(regex, '');
-    // Also remove self-closing tags
-    const selfClosingRegex = new RegExp(`<${tag}[^>]*/?>`, 'gi');
+    // Match self-closing tags
+    const selfClosingRegex = new RegExp(`<${tag}(\\s[^>]*)?/?>`, 'gi');
     sanitized = sanitized.replace(selfClosingRegex, '');
   }
 
-  // Remove dangerous attributes (event handlers)
-  for (const attr of DANGEROUS_ATTRIBUTES) {
-    // Match attribute with optional leading whitespace
-    const regex = new RegExp(`\\s*${attr}\\s*=\\s*["'][^"']*["']`, 'gi');
-    sanitized = sanitized.replace(regex, ' ');
-  }
+  // Remove ALL event handler attributes (catch any on* attribute)
+  // This is more robust than checking each one individually
+  sanitized = sanitized.replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, ' ');
+  sanitized = sanitized.replace(/\s+on\w+\s*=\s*[^\s>]*/gi, ' ');
 
-  // Remove javascript: and data: URLs in href and xlink:href
-  sanitized = sanitized.replace(/href\s*=\s*["']javascript:[^"']*["']/gi, '');
-  sanitized = sanitized.replace(/xlink:href\s*=\s*["']javascript:[^"']*["']/gi, '');
-  sanitized = sanitized.replace(/href\s*=\s*["']data:[^"']*["']/gi, '');
-  sanitized = sanitized.replace(/xlink:href\s*=\s*["']data:[^"']*["']/gi, '');
+  // Remove javascript:, data:, and vbscript: URLs from all attributes
+  // Check href, xlink:href, src, action, formaction, etc.
+  sanitized = sanitized.replace(/(href|xlink:href|src|action|formaction)\s*=\s*["']\s*(javascript|data|vbscript):[^"']*["']/gi, '');
+
+  // Remove style attributes that could contain expression() or other CSS-based XSS
+  sanitized = sanitized.replace(/style\s*=\s*["'][^"']*expression\s*\([^"']*["']/gi, '');
+  sanitized = sanitized.replace(/style\s*=\s*["'][^"']*javascript:[^"']*["']/gi, '');
+  sanitized = sanitized.replace(/style\s*=\s*["'][^"']*behavior:[^"']*["']/gi, '');
+
+  // Remove any remaining javascript: or data: protocols (unquoted)
+  sanitized = sanitized.replace(/=\s*(javascript|data|vbscript):/gi, '=');
 
   // Ensure it still looks like valid SVG
   if (!sanitized.trim().toLowerCase().includes('<svg')) {
@@ -71,6 +82,34 @@ export function sanitizeSvg(svgContent: string): string {
   }
 
   return sanitized;
+}
+
+/**
+ * Decode common HTML entities to prevent encoded XSS attacks
+ */
+function decodeHtmlEntities(text: string): string {
+  // Decode numeric character references (&#x6C; &#108;)
+  let decoded = text.replace(/&#x([0-9a-f]+);?/gi, (match, hex) => {
+    return String.fromCharCode(parseInt(hex, 16));
+  });
+  decoded = decoded.replace(/&#(\d+);?/g, (match, dec) => {
+    return String.fromCharCode(parseInt(dec, 10));
+  });
+
+  // Decode common named entities
+  const entities: Record<string, string> = {
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&apos;': "'",
+    '&amp;': '&',
+  };
+
+  for (const [entity, char] of Object.entries(entities)) {
+    decoded = decoded.replace(new RegExp(entity, 'gi'), char);
+  }
+
+  return decoded;
 }
 
 /**

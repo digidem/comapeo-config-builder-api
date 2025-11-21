@@ -188,11 +188,15 @@ export function createRateLimitMiddleware(config: RateLimitConfig) {
 
 /**
  * Elysia plugin for rate limiting
+ * Returns both the plugin and the limiter instance for cleanup
  */
-export function rateLimitPlugin(config: RateLimitConfig) {
+export function rateLimitPlugin(config: RateLimitConfig): {
+  plugin: (app: Elysia) => Elysia;
+  limiter: RateLimiter;
+} {
   const limiter = new RateLimiter(config);
 
-  return (app: Elysia) => {
+  const plugin = (app: Elysia) => {
     return app.onBeforeHandle(async ({ request, set }) => {
       const clientIP = getClientIP(request);
       const result = limiter.isRateLimited(clientIP);
@@ -228,6 +232,8 @@ export function rateLimitPlugin(config: RateLimitConfig) {
       set.headers['X-RateLimit-Remaining'] = String(usage.remaining);
     });
   };
+
+  return { plugin, limiter };
 }
 
 // Default rate limiter configuration
@@ -237,3 +243,6 @@ export const defaultRateLimitConfig: RateLimitConfig = {
   maxRequests: 100,
   message: 'Too many requests from this IP, please try again later'
 };
+
+// Export RateLimiter class for cleanup registration
+export type { RateLimiter };

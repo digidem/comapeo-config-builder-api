@@ -163,4 +163,129 @@ describe('SVG Sanitizer', () => {
       expect(result.sanitized).toContain('<svg>');
     });
   });
+
+  describe('Enhanced Security - Encoded Attacks', () => {
+    it('should remove encoded event handlers (hex encoding)', () => {
+      // &#x6F;nload = onload
+      const malicious = '<svg &#x6F;nload="alert(\'XSS\')"><circle cx="10" cy="10" r="5"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('alert');
+      expect(sanitized).not.toContain('onload');
+    });
+
+    it('should remove encoded event handlers (decimal encoding)', () => {
+      // &#111;nload = onload
+      const malicious = '<svg &#111;nload="alert(\'XSS\')"><circle cx="10" cy="10" r="5"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('alert');
+      expect(sanitized).not.toContain('onload');
+    });
+
+    it('should handle case variations in event handlers', () => {
+      const malicious = '<svg OnLoAd="alert(\'XSS\')"><circle cx="10" cy="10" r="5"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized.toLowerCase()).not.toContain('onload');
+    });
+
+    it('should remove entity-encoded attributes', () => {
+      const malicious = '<svg &lt;script&gt;alert("XSS")&lt;/script&gt;><circle cx="10" cy="10" r="5"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('script');
+    });
+  });
+
+  describe('Enhanced Security - Additional Attack Vectors', () => {
+    it('should remove CDATA sections', () => {
+      const malicious = '<svg><![CDATA[<script>alert("XSS")</script>]]><circle cx="10" cy="10" r="5"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('CDATA');
+      expect(sanitized).not.toContain('<script>');
+    });
+
+    it('should remove ENTITY declarations', () => {
+      const malicious = '<!ENTITY xxe SYSTEM "file:///etc/passwd"><svg><circle cx="10" cy="10" r="5"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('ENTITY');
+      expect(sanitized).not.toContain('xxe');
+    });
+
+    it('should remove vbscript: URLs', () => {
+      const malicious = '<svg><a href="vbscript:msgbox(\'XSS\')"><text>click</text></a></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('vbscript:');
+    });
+
+    it('should remove style with expression()', () => {
+      const malicious = '<svg><rect style="width:expression(alert(\'XSS\'))" x="0" y="0"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('expression(');
+    });
+
+    it('should remove style with javascript:', () => {
+      const malicious = '<svg><rect style="background:url(javascript:alert(\'XSS\'))" x="0" y="0"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('javascript:');
+    });
+
+    it('should remove style with behavior:', () => {
+      const malicious = '<svg><rect style="behavior:url(evil.htc)" x="0" y="0"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('behavior:');
+    });
+  });
+
+  describe('Enhanced Security - Additional Dangerous Tags', () => {
+    it('should remove animate tags', () => {
+      const malicious = '<svg><animate onbegin="alert(\'XSS\')"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('<animate');
+    });
+
+    it('should remove animateTransform tags', () => {
+      const malicious = '<svg><animateTransform onbegin="alert(\'XSS\')"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('<animateTransform');
+    });
+
+    it('should remove image tags with external references', () => {
+      const malicious = '<svg><image href="http://evil.com/xss.svg"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('<image');
+    });
+
+    it('should remove feImage tags with external references', () => {
+      const malicious = '<svg><filter><feImage href="http://evil.com/xss.svg"/></filter></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('<feImage');
+    });
+
+    it('should remove set tags', () => {
+      const malicious = '<svg><set attributeName="onload" to="alert(\'XSS\')"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('<set');
+    });
+  });
+
+  describe('Enhanced Security - Comprehensive Event Handler Removal', () => {
+    it('should remove any on* attribute regardless of specific name', () => {
+      const malicious = '<svg onunknownevent="alert(\'XSS\')"><circle cx="10" cy="10" r="5"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('onunknownevent');
+      expect(sanitized).not.toContain('alert');
+    });
+
+    it('should remove multiple event handlers', () => {
+      const malicious = '<svg onload="a()" onerror="b()" onclick="c()"><circle cx="10" cy="10" r="5"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('onload');
+      expect(sanitized).not.toContain('onerror');
+      expect(sanitized).not.toContain('onclick');
+    });
+
+    it('should remove event handlers without quotes', () => {
+      const malicious = '<svg onload=alert(1)><circle cx="10" cy="10" r="5"/></svg>';
+      const sanitized = sanitizeSvg(malicious);
+      expect(sanitized).not.toContain('onload');
+    });
+  });
 });

@@ -699,4 +699,328 @@ describe('Schema Validation', () => {
       expect(result.errors).toEqual([]);
     });
   });
+
+  describe('Field defaultValue validation', () => {
+    it('should accept valid string defaultValue for text field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'name',
+          name: 'Name',
+          type: 'text',
+          defaultValue: 'Default Name'
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should reject non-string defaultValue for text field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'name',
+          name: 'Name',
+          type: 'text',
+          defaultValue: 123 as any
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('defaultValue must be a string');
+    });
+
+    it('should accept valid number defaultValue for number field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'height',
+          name: 'Height',
+          type: 'number',
+          defaultValue: 15.5
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should reject string defaultValue for number field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'height',
+          name: 'Height',
+          type: 'number',
+          defaultValue: '15.5' as any
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('defaultValue must be a number');
+    });
+
+    it('should reject defaultValue below minimum for number field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'age',
+          name: 'Age',
+          type: 'number',
+          min: 0,
+          max: 100,
+          defaultValue: -5
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('below minimum');
+    });
+
+    it('should reject defaultValue above maximum for number field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'age',
+          name: 'Age',
+          type: 'number',
+          min: 0,
+          max: 100,
+          defaultValue: 150
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('above maximum');
+    });
+
+    it('should accept valid integer defaultValue for integer field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'count',
+          name: 'Count',
+          type: 'integer',
+          defaultValue: 42
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should reject float defaultValue for integer field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'count',
+          name: 'Count',
+          type: 'integer',
+          defaultValue: 42.5
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('must be an integer');
+    });
+
+    it('should accept valid boolean defaultValue for boolean field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'active',
+          name: 'Active',
+          type: 'boolean',
+          defaultValue: true
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should reject non-boolean defaultValue for boolean field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'active',
+          name: 'Active',
+          type: 'boolean',
+          defaultValue: 'true' as any
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('must be a boolean');
+    });
+
+    it('should accept valid option value as defaultValue for select field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'species',
+          name: 'Species',
+          type: 'select',
+          options: [
+            { value: 'oak', label: 'Oak' },
+            { value: 'pine', label: 'Pine' }
+          ],
+          defaultValue: 'oak'
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should reject invalid option value as defaultValue for select field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'species',
+          name: 'Species',
+          type: 'select',
+          options: [
+            { value: 'oak', label: 'Oak' },
+            { value: 'pine', label: 'Pine' }
+          ],
+          defaultValue: 'maple'
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('not a valid option');
+    });
+
+    it('should accept valid array of options as defaultValue for multiselect field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'tags',
+          name: 'Tags',
+          type: 'multiselect',
+          options: [
+            { value: 'red', label: 'Red' },
+            { value: 'blue', label: 'Blue' },
+            { value: 'green', label: 'Green' }
+          ],
+          defaultValue: ['red', 'blue']
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should reject non-array defaultValue for multiselect field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'tags',
+          name: 'Tags',
+          type: 'multiselect',
+          options: [
+            { value: 'red', label: 'Red' },
+            { value: 'blue', label: 'Blue' }
+          ],
+          defaultValue: 'red' as any
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('must be an array');
+    });
+
+    it('should reject invalid options in multiselect defaultValue', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'tags',
+          name: 'Tags',
+          type: 'multiselect',
+          options: [
+            { value: 'red', label: 'Red' },
+            { value: 'blue', label: 'Blue' }
+          ],
+          defaultValue: ['red', 'yellow']
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('invalid options');
+    });
+
+    it('should accept valid date string as defaultValue for date field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'created',
+          name: 'Created',
+          type: 'date',
+          defaultValue: '2024-01-15'
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should reject invalid date string as defaultValue for date field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'created',
+          name: 'Created',
+          type: 'date',
+          defaultValue: 'not-a-date'
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('not a valid date');
+    });
+
+    it('should reject defaultValue for photo field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'photo',
+          name: 'Photo',
+          type: 'photo',
+          defaultValue: 'some-photo-url' as any
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('should not have a defaultValue');
+    });
+
+    it('should reject defaultValue for location field', () => {
+      const request: BuildRequest = {
+        metadata: { name: 'Test', version: '1.0.0' },
+        categories: [],
+        fields: [{
+          id: 'location',
+          name: 'Location',
+          type: 'location',
+          defaultValue: { lat: 0, lon: 0 } as any
+        }]
+      };
+      const result = validateBuildRequest(request);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('should not have a defaultValue');
+    });
+  });
 });

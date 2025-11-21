@@ -17,10 +17,11 @@ try {
 }
 
 describe('POST /build Integration Tests', () => {
-  let app: ReturnType<typeof createApp>;
+  let app: ReturnType<typeof createApp>['app'];
 
   beforeAll(() => {
-    app = createApp();
+    const appContext = createApp();
+    app = appContext.app;
   });
 
   describe('JSON Mode', () => {

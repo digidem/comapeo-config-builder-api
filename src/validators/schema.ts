@@ -253,6 +253,98 @@ function validateFields(
         errors.push(`Field ${field.id} has invalid step: must be greater than 0`);
       }
     }
+
+    // Validate defaultValue type matches field type
+    if (field.defaultValue !== undefined) {
+      validateDefaultValue(field, errors);
+    }
+  }
+}
+
+/**
+ * Validates that defaultValue matches the field type
+ */
+function validateDefaultValue(field: Field, errors: string[]): void {
+  const value = field.defaultValue;
+
+  switch (field.type) {
+    case 'text':
+    case 'textarea':
+      if (typeof value !== 'string') {
+        errors.push(`Field ${field.id} defaultValue must be a string (field type: ${field.type})`);
+      }
+      break;
+
+    case 'number':
+      if (typeof value !== 'number') {
+        errors.push(`Field ${field.id} defaultValue must be a number (field type: number)`);
+      } else if (field.min !== undefined && value < field.min) {
+        errors.push(`Field ${field.id} defaultValue ${value} is below minimum ${field.min}`);
+      } else if (field.max !== undefined && value > field.max) {
+        errors.push(`Field ${field.id} defaultValue ${value} is above maximum ${field.max}`);
+      }
+      break;
+
+    case 'integer':
+      if (typeof value !== 'number' || !Number.isInteger(value)) {
+        errors.push(`Field ${field.id} defaultValue must be an integer (field type: integer)`);
+      } else if (field.min !== undefined && value < field.min) {
+        errors.push(`Field ${field.id} defaultValue ${value} is below minimum ${field.min}`);
+      } else if (field.max !== undefined && value > field.max) {
+        errors.push(`Field ${field.id} defaultValue ${value} is above maximum ${field.max}`);
+      }
+      break;
+
+    case 'boolean':
+      if (typeof value !== 'boolean') {
+        errors.push(`Field ${field.id} defaultValue must be a boolean (field type: boolean)`);
+      }
+      break;
+
+    case 'select':
+      if (typeof value !== 'string') {
+        errors.push(`Field ${field.id} defaultValue must be a string (field type: select)`);
+      } else if (field.options) {
+        const validValues = field.options.map(opt => opt.value);
+        if (!validValues.includes(value)) {
+          errors.push(`Field ${field.id} defaultValue "${value}" is not a valid option. Valid options: ${validValues.join(', ')}`);
+        }
+      }
+      break;
+
+    case 'multiselect':
+      if (!Array.isArray(value)) {
+        errors.push(`Field ${field.id} defaultValue must be an array (field type: multiselect)`);
+      } else if (field.options) {
+        const validValues = field.options.map(opt => opt.value);
+        const invalidValues = value.filter(v => !validValues.includes(v));
+        if (invalidValues.length > 0) {
+          errors.push(`Field ${field.id} defaultValue contains invalid options: ${invalidValues.join(', ')}. Valid options: ${validValues.join(', ')}`);
+        }
+      }
+      break;
+
+    case 'date':
+    case 'datetime':
+      if (typeof value !== 'string') {
+        errors.push(`Field ${field.id} defaultValue must be a string (field type: ${field.type})`);
+      } else {
+        const date = new Date(value);
+        if (isNaN(date.getTime())) {
+          errors.push(`Field ${field.id} defaultValue "${value}" is not a valid date`);
+        }
+      }
+      break;
+
+    case 'photo':
+    case 'location':
+      // These types typically don't have default values, but if they do, warn
+      errors.push(`Field ${field.id} of type ${field.type} should not have a defaultValue`);
+      break;
+
+    default:
+      // Unknown field type - already validated elsewhere
+      break;
   }
 }
 
