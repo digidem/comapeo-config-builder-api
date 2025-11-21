@@ -235,7 +235,7 @@ async function handleJSONMode(request: Request, maxSize: number, signal?: AbortS
 /**
  * Handle legacy ZIP mode request
  */
-async function handleZIPMode(request: Request, maxSize: number, _signal?: AbortSignal): Promise<Response> {
+async function handleZIPMode(request: Request, maxSize: number, signal?: AbortSignal): Promise<Response> {
   logger.info('Processing legacy ZIP mode request', { mode: 'zip', deprecated: true });
 
   // Read body with size limit BEFORE parsing multipart
@@ -285,7 +285,7 @@ async function handleZIPMode(request: Request, maxSize: number, _signal?: AbortS
   // Build using the legacy method
   try {
     const zipBuffer = await file.arrayBuffer();
-    const builtFilePath = await buildSettings(zipBuffer);
+    const builtFilePath = await buildSettings(zipBuffer, { signal });
 
     // Read the file and return it
     const builtFile = Bun.file(builtFilePath);
