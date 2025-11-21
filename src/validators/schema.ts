@@ -190,7 +190,7 @@ function validateIcons(icons: Icon[], errors: string[], iconIds: Set<string>): v
 
     // Validate svgData format if present (only if it's a string)
     if (hasSvgData) {
-      const svgCheck = isValidSvgStructure(icon.svgData);
+      const svgCheck = isValidSvgStructure(icon.svgData!);
       if (!svgCheck.valid) {
         errors.push(`Icon ${icon.id} has invalid SVG data: ${svgCheck.error}`);
       }
@@ -198,7 +198,7 @@ function validateIcons(icons: Icon[], errors: string[], iconIds: Set<string>): v
 
     // Validate svgUrl format if present (only if it's a string)
     if (hasSvgUrl) {
-      const urlCheck = validateIconUrl(icon.svgUrl);
+      const urlCheck = validateIconUrl(icon.svgUrl!);
       if (!urlCheck.valid) {
         errors.push(`Icon ${icon.id} has invalid or unsafe URL: ${urlCheck.error}`);
       }
