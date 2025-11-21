@@ -17,11 +17,12 @@ export function metricsMiddleware(app: Elysia): Elysia {
   });
 
   // Record metrics after request completes
-  app.onAfterHandle(({ request, response, store }: any) => {
+  app.onAfterHandle(({ request, response, set, store }: any) => {
     const duration = Date.now() - (store.requestStartTime || Date.now());
     const url = new URL(request.url);
     const endpoint = url.pathname;
-    const status = response.status || 200;
+    // Check response.status first, then set.status from context, then default to 200
+    const status = response?.status || set?.status || 200;
 
     metrics.recordRequest(endpoint, status, duration);
     metrics.decrementActiveRequests();
