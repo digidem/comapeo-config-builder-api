@@ -84,6 +84,11 @@ export async function buildFromJSON(request: BuildRequest, options?: BuildOption
     let builtSettingsPath = '';
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Check for abort during polling
+      if (options?.signal?.aborted) {
+        throw new Error('Command aborted');
+      }
+
       try {
         const fileStats = await fs.stat(buildPath);
         if (fileStats.isFile() && fileStats.size > 0) {
