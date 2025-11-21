@@ -19,25 +19,28 @@ const MAX_ZIP_SIZE = 50 * 1024 * 1024; // 50MB for ZIP
  * Supports both JSON mode and legacy ZIP mode
  */
 export async function handleBuild(request: Request): Promise<Response> {
-  // Check content-length header for size limits
-  const contentLength = request.headers.get('content-length');
-  if (contentLength) {
-    const size = parseInt(contentLength, 10);
-    if (size > MAX_ZIP_SIZE) {
-      return createErrorResponse(
-        'PayloadTooLarge',
-        `Request body size ${size} bytes exceeds maximum ${MAX_ZIP_SIZE} bytes`,
-        413
-      );
-    }
-  }
-
   const contentType = request.headers.get('Content-Type') || '';
 
   // Detect mode based on Content-Type (more robust parsing)
   const normalizedContentType = contentType.toLowerCase().split(';')[0].trim();
   const isJSONMode = normalizedContentType === 'application/json';
   const isZIPMode = normalizedContentType === 'multipart/form-data';
+
+  // Apply appropriate size limit based on content type
+  const maxSize = isJSONMode ? MAX_JSON_SIZE : MAX_ZIP_SIZE;
+
+  // Check content-length header for size limits
+  const contentLength = request.headers.get('content-length');
+  if (contentLength) {
+    const size = parseInt(contentLength, 10);
+    if (size > maxSize) {
+      return createErrorResponse(
+        'PayloadTooLarge',
+        `Request body size ${size} bytes exceeds maximum ${maxSize} bytes`,
+        413
+      );
+    }
+  }
 
   try {
     if (isJSONMode) {
