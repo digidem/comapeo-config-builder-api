@@ -135,11 +135,17 @@ async function handleJSONMode(request: Request): Promise<Response> {
       }
     });
 
-    // Clean up temporary files after response is created
-    await cleanup();
-
-    // Record successful build
+    // Record successful build before cleanup (build succeeded regardless of cleanup outcome)
     metrics.recordBuild(true, Date.now() - buildStartTime, false);
+
+    // Best-effort cleanup - don't let cleanup errors affect the successful response
+    try {
+      await cleanup();
+    } catch (cleanupError) {
+      logger.warn('Cleanup failed after successful build', {
+        error: cleanupError instanceof Error ? cleanupError.message : 'Unknown error'
+      });
+    }
 
     return response;
 
