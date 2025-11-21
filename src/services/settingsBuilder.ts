@@ -5,6 +5,29 @@ import os from 'os';
 import { runShellCommand } from '../utils/shell';
 import { config } from '../config/app';
 
+/**
+ * Sanitize a string for use in filenames
+ * Prevents path traversal attacks by stripping directory components and dangerous characters
+ */
+function sanitizeFilenameComponent(input: string): string {
+  // Use path.basename to strip any directory components (handles ../, /, etc.)
+  let sanitized = path.basename(input);
+
+  // Remove any remaining potentially dangerous characters
+  // Allow alphanumeric, hyphens, underscores, dots (but not leading dots)
+  sanitized = sanitized.replace(/[^a-zA-Z0-9\-_\.]/g, '_');
+
+  // Remove leading dots to prevent hidden files
+  sanitized = sanitized.replace(/^\.+/, '');
+
+  // Ensure non-empty
+  if (!sanitized) {
+    sanitized = 'unnamed';
+  }
+
+  return sanitized;
+}
+
 export interface BuildSettingsOptions {
   signal?: AbortSignal;
 }
@@ -27,7 +50,10 @@ export async function buildSettings(fileBuffer: ArrayBuffer, options?: BuildSett
   const fullConfigPath = tmpDir;
   const buildDir = path.join(fullConfigPath, 'build');
   const metadata = JSON.parse(await fs.readFile(path.join(fullConfigPath, 'metadata.json'), 'utf-8'));
-  const buildFileName = `${metadata.name}-${metadata.version}.comapeocat`;
+  // Sanitize name and version to prevent path traversal attacks
+  const safeName = sanitizeFilenameComponent(metadata.name || 'unnamed');
+  const safeVersion = sanitizeFilenameComponent(metadata.version || '0.0.0');
+  const buildFileName = `${safeName}-${safeVersion}.comapeocat`;
   const buildPath = path.join(buildDir, buildFileName);
 
   console.log('Building settings in:', buildPath);

@@ -12,6 +12,29 @@ import { safeFetch } from '../utils/urlValidator';
 import { validateAndSanitizeSvg } from '../utils/svgSanitizer';
 import { logger } from '../utils/logger';
 
+/**
+ * Sanitize a string for use in filenames
+ * Prevents path traversal attacks by stripping directory components and dangerous characters
+ */
+function sanitizeFilenameComponent(input: string): string {
+  // Use path.basename to strip any directory components (handles ../, /, etc.)
+  let sanitized = path.basename(input);
+
+  // Remove any remaining potentially dangerous characters
+  // Allow alphanumeric, hyphens, underscores, dots (but not leading dots)
+  sanitized = sanitized.replace(/[^a-zA-Z0-9\-_\.]/g, '_');
+
+  // Remove leading dots to prevent hidden files
+  sanitized = sanitized.replace(/^\.+/, '');
+
+  // Ensure non-empty
+  if (!sanitized) {
+    sanitized = 'unnamed';
+  }
+
+  return sanitized;
+}
+
 export interface BuildResult {
   path: string;
   cleanup: () => Promise<void>;
@@ -60,7 +83,10 @@ export async function buildFromJSON(request: BuildRequest, options?: BuildOption
     const buildDir = path.join(tmpDir, 'build');
     await fs.mkdir(buildDir, { recursive: true });
 
-    const buildFileName = `${request.metadata.name}-${request.metadata.version}.comapeocat`;
+    // Sanitize name and version to prevent path traversal attacks
+    const safeName = sanitizeFilenameComponent(request.metadata.name);
+    const safeVersion = sanitizeFilenameComponent(request.metadata.version);
+    const buildFileName = `${safeName}-${safeVersion}.comapeocat`;
     const buildPath = path.join(buildDir, buildFileName);
 
     logger.info('Starting build process', { buildPath, name: request.metadata.name, version: request.metadata.version });
