@@ -258,12 +258,22 @@ async function handleZIPMode(request: Request, maxSize: number, signal?: AbortSi
   try {
     bodyBuffer = await readLimitedBody(request, maxSize, signal);
   } catch (error) {
-    if (error instanceof Error && error.name === 'PayloadTooLarge') {
-      return createErrorResponse(
-        'PayloadTooLarge',
-        error.message,
-        413
-      );
+    if (error instanceof Error) {
+      if (error.name === 'PayloadTooLarge') {
+        return createErrorResponse(
+          'PayloadTooLarge',
+          error.message,
+          413
+        );
+      }
+      // Map body reading errors to 400 client errors
+      if (error.message === 'No request body' || error.message === 'Request aborted') {
+        return createErrorResponse(
+          'InvalidRequest',
+          error.message,
+          400
+        );
+      }
     }
     throw error;
   }
