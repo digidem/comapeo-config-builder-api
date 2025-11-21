@@ -2,6 +2,11 @@
  * URL validation and security utilities
  */
 
+import dns from 'dns';
+import { promisify } from 'util';
+
+const dnsLookup = promisify(dns.lookup);
+
 export interface UrlValidationResult {
   valid: boolean;
   error?: string;
@@ -120,6 +125,48 @@ export function validateIconUrl(url: string): UrlValidationResult {
 const MAX_REDIRECTS = 5;
 
 /**
+ * Check if an IP address is in a blocked range
+ */
+function isBlockedIP(ip: string): boolean {
+  // Check exact matches
+  if (BLOCKED_HOSTS.includes(ip)) {
+    return true;
+  }
+
+  // Check IP ranges
+  for (const pattern of BLOCKED_IP_RANGES) {
+    if (pattern.test(ip)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Resolve hostname and verify the resolved IP is not blocked
+ * Prevents DNS rebinding attacks where hostnames resolve to internal IPs
+ */
+async function validateResolvedIP(hostname: string): Promise<void> {
+  try {
+    const result = await dnsLookup(hostname, { all: true });
+    const addresses = Array.isArray(result) ? result : [result];
+
+    for (const addr of addresses) {
+      const ip = typeof addr === 'string' ? addr : addr.address;
+      if (isBlockedIP(ip)) {
+        throw new Error(`Hostname ${hostname} resolves to blocked IP ${ip}`);
+      }
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('resolves to blocked IP')) {
+      throw error;
+    }
+    // DNS lookup failures are acceptable - fetch will fail anyway
+  }
+}
+
+/**
  * Fetch URL with security restrictions
  * Uses manual redirect handling to validate each hop against SSRF blocklist
  */
@@ -148,6 +195,10 @@ export async function safeFetch(
     let redirectCount = 0;
 
     while (true) {
+      // Validate resolved IP before fetching (prevents DNS rebinding)
+      const parsedUrl = new URL(currentUrl);
+      await validateResolvedIP(parsedUrl.hostname);
+
       const response = await fetch(currentUrl, {
         signal: controller.signal,
         headers: {
