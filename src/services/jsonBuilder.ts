@@ -365,7 +365,9 @@ async function writeTranslations(tmpDir: string, request: BuildRequest): Promise
       translationData.icons = translation.icons;
     }
 
-    const translationPath = path.join(translationsDir, `${locale}.json`);
+    // Sanitize locale to prevent path traversal
+    const safeLocale = sanitizeFilenameComponent(locale);
+    const translationPath = path.join(translationsDir, `${safeLocale}.json`);
     await fs.writeFile(translationPath, JSON.stringify(translationData, null, 2), 'utf-8');
   }
 }
