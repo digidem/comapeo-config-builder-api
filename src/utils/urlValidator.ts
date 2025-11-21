@@ -192,7 +192,7 @@ export async function safeFetch(
         throw new Error('Content-Type must be SVG or XML');
       }
 
-      // Check content-length if available
+      // Check content-length if available (early rejection)
       const contentLength = response.headers.get('content-length');
       if (contentLength) {
         const size = parseInt(contentLength, 10);
@@ -201,13 +201,41 @@ export async function safeFetch(
         }
       }
 
-      // Read content with size limit
-      const text = await response.text();
-      if (text.length > maxSize) {
-        throw new Error(`Content size ${text.length} bytes exceeds maximum ${maxSize} bytes`);
+      // Stream response body with size limit enforcement
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
       }
 
-      return text;
+      const chunks: Uint8Array[] = [];
+      let totalSize = 0;
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          totalSize += value.length;
+          if (totalSize > maxSize) {
+            reader.cancel();
+            throw new Error(`Content size exceeds maximum ${maxSize} bytes`);
+          }
+
+          chunks.push(value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      // Combine chunks and decode as text
+      const combined = new Uint8Array(totalSize);
+      let offset = 0;
+      for (const chunk of chunks) {
+        combined.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      return new TextDecoder().decode(combined);
     }
 
   } catch (error) {
