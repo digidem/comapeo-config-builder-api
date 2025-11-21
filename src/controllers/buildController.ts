@@ -285,6 +285,8 @@ async function handleJSONMode(request: Request, maxSize: number, signal?: AbortS
 async function handleZIPMode(request: Request, maxSize: number, signal?: AbortSignal): Promise<Response> {
   logger.info('Processing legacy ZIP mode request', { mode: 'zip', deprecated: true });
 
+  const buildStartTime = Date.now();
+
   // Read body with size limit BEFORE parsing multipart
   // This prevents OOM from unbounded chunked uploads
   let bodyBuffer: ArrayBuffer;
@@ -351,6 +353,9 @@ async function handleZIPMode(request: Request, maxSize: number, signal?: AbortSi
     // Extract filename from path
     const filename = builtFilePath.split('/').pop() || 'config.comapeocat';
 
+    // Record successful build
+    metrics.recordBuild(true, Date.now() - buildStartTime, false);
+
     return new Response(blob, {
       status: 200,
       headers: {
@@ -367,6 +372,10 @@ async function handleZIPMode(request: Request, maxSize: number, signal?: AbortSi
       mode: 'zip',
       deprecated: true
     });
+
+    // Record failed build
+    metrics.recordBuild(false, Date.now() - buildStartTime, false);
+
     return new Response(
       JSON.stringify({
         error: 'BuildError',
