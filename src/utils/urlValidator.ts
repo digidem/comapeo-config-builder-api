@@ -117,8 +117,11 @@ export function validateIconUrl(url: string): UrlValidationResult {
   return { valid: true };
 }
 
+const MAX_REDIRECTS = 5;
+
 /**
  * Fetch URL with security restrictions
+ * Uses manual redirect handling to validate each hop against SSRF blocklist
  */
 export async function safeFetch(
   url: string,
@@ -130,7 +133,7 @@ export async function safeFetch(
   const maxSize = options.maxSize || 1024 * 1024; // 1MB default
   const timeout = options.timeout || 10000; // 10s default
 
-  // Validate URL first
+  // Validate initial URL
   const validation = validateIconUrl(url);
   if (!validation.valid) {
     throw new Error(`URL validation failed: ${validation.error}`);
@@ -141,43 +144,71 @@ export async function safeFetch(
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'CoMapeo-Config-Builder/2.0.0',
-        'Accept': 'image/svg+xml,image/*'
-      },
-      redirect: 'follow',
-      // Prevent following redirects to blocked hosts
-      // Note: Bun's fetch may not fully support this, but we include it
-    });
+    let currentUrl = url;
+    let redirectCount = 0;
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
+    while (true) {
+      const response = await fetch(currentUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'CoMapeo-Config-Builder/2.0.0',
+          'Accept': 'image/svg+xml,image/*'
+        },
+        redirect: 'manual', // Handle redirects manually to validate each hop
+      });
 
-    // Check content-type
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('svg') && !contentType.includes('xml')) {
-      throw new Error('Content-Type must be SVG or XML');
-    }
+      // Handle redirects manually
+      if (response.status >= 300 && response.status < 400) {
+        redirectCount++;
+        if (redirectCount > MAX_REDIRECTS) {
+          throw new Error(`Too many redirects (max ${MAX_REDIRECTS})`);
+        }
 
-    // Check content-length if available
-    const contentLength = response.headers.get('content-length');
-    if (contentLength) {
-      const size = parseInt(contentLength, 10);
-      if (size > maxSize) {
-        throw new Error(`File size ${size} bytes exceeds maximum ${maxSize} bytes`);
+        const location = response.headers.get('location');
+        if (!location) {
+          throw new Error('Redirect response missing Location header');
+        }
+
+        // Resolve relative URLs against current URL
+        const redirectUrl = new URL(location, currentUrl).href;
+
+        // Validate redirect target against SSRF blocklist
+        const redirectValidation = validateIconUrl(redirectUrl);
+        if (!redirectValidation.valid) {
+          throw new Error(`Redirect blocked: ${redirectValidation.error}`);
+        }
+
+        currentUrl = redirectUrl;
+        continue;
       }
-    }
 
-    // Read content with size limit
-    const text = await response.text();
-    if (text.length > maxSize) {
-      throw new Error(`Content size ${text.length} bytes exceeds maximum ${maxSize} bytes`);
-    }
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
-    return text;
+      // Check content-type
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('svg') && !contentType.includes('xml')) {
+        throw new Error('Content-Type must be SVG or XML');
+      }
+
+      // Check content-length if available
+      const contentLength = response.headers.get('content-length');
+      if (contentLength) {
+        const size = parseInt(contentLength, 10);
+        if (size > maxSize) {
+          throw new Error(`File size ${size} bytes exceeds maximum ${maxSize} bytes`);
+        }
+      }
+
+      // Read content with size limit
+      const text = await response.text();
+      if (text.length > maxSize) {
+        throw new Error(`Content size ${text.length} bytes exceeds maximum ${maxSize} bytes`);
+      }
+
+      return text;
+    }
 
   } catch (error) {
     if (error instanceof Error) {
