@@ -69,7 +69,12 @@ export function validateIconUrl(url: string): UrlValidationResult {
     }
   }
 
-  // Check for blocked IP ranges
+  // Additional checks for suspicious patterns
+  if (hostname === '') {
+    return { valid: false, error: 'Invalid hostname' };
+  }
+
+  // Check for blocked IP ranges (IPv4)
   for (const pattern of BLOCKED_IP_RANGES) {
     if (pattern.test(hostname)) {
       return {
@@ -79,9 +84,29 @@ export function validateIconUrl(url: string): UrlValidationResult {
     }
   }
 
-  // Additional checks for suspicious patterns
-  if (hostname === '') {
-    return { valid: false, error: 'Invalid hostname' };
+  // Check for blocked IPv6 addresses (URL.hostname includes brackets for IPv6)
+  // IPv6 loopback: ::1
+  if (hostname === '[::1]') {
+    return {
+      valid: false,
+      error: 'Access to internal/private hosts is not allowed'
+    };
+  }
+
+  // IPv6 link-local addresses: fe80::/10
+  if (hostname.startsWith('[fe80:')) {
+    return {
+      valid: false,
+      error: 'Access to private IP ranges is not allowed'
+    };
+  }
+
+  // IPv6 unique local addresses: fc00::/7 (fc00:: and fd00::)
+  if (hostname.startsWith('[fc00:') || hostname.startsWith('[fd00:')) {
+    return {
+      valid: false,
+      error: 'Access to private IP ranges is not allowed'
+    };
   }
 
   // Check for @ in username:password patterns (though URL class should normalize this)

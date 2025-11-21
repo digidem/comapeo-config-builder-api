@@ -24,6 +24,14 @@ export interface ValidationResult {
 export function validateBuildRequest(request: BuildRequest): ValidationResult {
   const errors: string[] = [];
 
+  // Type check the request structure
+  if (!request || typeof request !== 'object' || Array.isArray(request)) {
+    return {
+      valid: false,
+      errors: ['Request body must be a valid JSON object']
+    };
+  }
+
   // Validate metadata
   validateMetadata(request, errors);
 
@@ -34,17 +42,35 @@ export function validateBuildRequest(request: BuildRequest): ValidationResult {
 
   // Validate icons and collect IDs
   if (request.icons) {
-    validateIcons(request.icons, errors, iconIds);
+    if (!Array.isArray(request.icons)) {
+      errors.push('icons must be an array');
+    } else {
+      validateIcons(request.icons, errors, iconIds);
+    }
   }
 
   // Validate categories and collect IDs
-  validateCategories(request.categories, errors, categoryIds, iconIds, fieldIds);
+  if (!request.categories) {
+    errors.push('categories is required');
+  } else if (!Array.isArray(request.categories)) {
+    errors.push('categories must be an array');
+  } else {
+    validateCategories(request.categories, errors, categoryIds, iconIds, fieldIds);
+  }
 
   // Validate fields and collect IDs
-  validateFields(request.fields, errors, fieldIds, iconIds);
+  if (!request.fields) {
+    errors.push('fields is required');
+  } else if (!Array.isArray(request.fields)) {
+    errors.push('fields must be an array');
+  } else {
+    validateFields(request.fields, errors, fieldIds, iconIds);
+  }
 
   // Now validate cross-references after collecting all IDs
-  validateCategoryReferences(request.categories, categoryIds, fieldIds, errors);
+  if (Array.isArray(request.categories)) {
+    validateCategoryReferences(request.categories, categoryIds, fieldIds, errors);
+  }
 
   // Validate translations
   if (request.translations) {
@@ -68,11 +94,17 @@ function validateMetadata(request: BuildRequest, errors: string[]): void {
 
   const { name, version } = request.metadata;
 
-  if (!name || name.trim() === '') {
+  // Type check name
+  if (typeof name !== 'string') {
+    errors.push('metadata.name must be a string');
+  } else if (!name || name.trim() === '') {
     errors.push('metadata.name is required and must be non-empty');
   }
 
-  if (!version || version.trim() === '') {
+  // Type check version
+  if (typeof version !== 'string') {
+    errors.push('metadata.version must be a string');
+  } else if (!version || version.trim() === '') {
     errors.push('metadata.version is required and must be non-empty');
   } else if (!isValidSemanticVersion(version)) {
     errors.push('metadata.version must follow semantic versioning format (MAJOR.MINOR.PATCH)');
