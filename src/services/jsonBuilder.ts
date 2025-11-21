@@ -220,7 +220,9 @@ async function writeIcons(tmpDir: string, icons: Icon[]): Promise<void> {
     }
 
     // Write the sanitized SVG file
-    const iconPath = path.join(iconsDir, `${icon.id}.svg`);
+    // Sanitize icon ID to prevent path traversal
+    const safeIconId = sanitizeFilenameComponent(icon.id);
+    const iconPath = path.join(iconsDir, `${safeIconId}.svg`);
     await fs.writeFile(iconPath, sanitizationResult.sanitized, 'utf-8');
   }
 }
@@ -265,7 +267,9 @@ async function writeCategories(tmpDir: string, request: BuildRequest): Promise<v
       categoryData.visible = category.visible;
     }
 
-    const categoryPath = path.join(categoriesDir, `${category.id}.json`);
+    // Sanitize category ID to prevent path traversal
+    const safeCategoryId = sanitizeFilenameComponent(category.id);
+    const categoryPath = path.join(categoriesDir, `${safeCategoryId}.json`);
     await fs.writeFile(categoryPath, JSON.stringify(categoryData, null, 2), 'utf-8');
   }
 }
@@ -328,7 +332,9 @@ async function writeFields(tmpDir: string, request: BuildRequest): Promise<void>
       fieldData.step = field.step;
     }
 
-    const fieldPath = path.join(fieldsDir, `${field.id}.json`);
+    // Sanitize field ID to prevent path traversal
+    const safeFieldId = sanitizeFilenameComponent(field.id);
+    const fieldPath = path.join(fieldsDir, `${safeFieldId}.json`);
     await fs.writeFile(fieldPath, JSON.stringify(fieldData, null, 2), 'utf-8');
   }
 }
