@@ -3,8 +3,10 @@ import { cors } from "@elysiajs/cors";
 import { handleBuildSettings } from './controllers/settingsController';
 import { handleBuild } from './controllers/buildController';
 import { handleHealthCheck, handleDetailedHealthCheck } from './controllers/healthController';
+import { handleMetrics } from './controllers/metricsController';
 import { rateLimitPlugin, defaultRateLimitConfig, type RateLimiter } from './middleware/rateLimit';
 import { withTimeout, defaultTimeoutConfig } from './middleware/timeout';
+import { metricsMiddleware } from './middleware/metricsMiddleware';
 
 export interface AppContext {
   app: Elysia;
@@ -18,6 +20,12 @@ export interface AppContext {
 export function createApp(): AppContext {
   const app = new Elysia().use(cors());
   let rateLimiter: RateLimiter | null = null;
+
+  // Add metrics tracking middleware (before rate limiting)
+  const metricsEnabled = process.env.METRICS_ENABLED !== 'false';
+  if (metricsEnabled) {
+    metricsMiddleware(app);
+  }
 
   // Add rate limiting if enabled (default: enabled in production)
   const rateLimitEnabled = process.env.RATE_LIMIT_ENABLED !== 'false';
@@ -34,6 +42,11 @@ export function createApp(): AppContext {
 
   app.get('/health/detailed', async () => {
     return handleDetailedHealthCheck();
+  });
+
+  // Metrics endpoint (Prometheus format)
+  app.get('/metrics', () => {
+    return handleMetrics();
   });
 
   // v2.0.0 Build endpoint - supports both JSON and ZIP modes

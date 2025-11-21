@@ -8,6 +8,7 @@ import { validateBuildRequest } from '../validators/schema';
 import { buildFromJSON } from '../services/jsonBuilder';
 import { buildSettings } from '../services/settingsBuilder';
 import { logger } from '../utils/logger';
+import { metrics } from './metricsController';
 
 // Request size limits
 const MAX_JSON_SIZE = 10 * 1024 * 1024; // 10MB for JSON
@@ -83,6 +84,8 @@ export async function handleBuild(request: Request): Promise<Response> {
 async function handleJSONMode(request: Request): Promise<Response> {
   logger.info('Processing JSON mode request', { mode: 'json' });
 
+  const buildStartTime = Date.now();
+
   // Parse JSON body
   let buildRequest: BuildRequest;
   try {
@@ -99,6 +102,8 @@ async function handleJSONMode(request: Request): Promise<Response> {
   const validationResult = validateBuildRequest(buildRequest);
   if (!validationResult.valid) {
     const errorMessage = validationResult.errors.join('; ');
+    // Record validation error in metrics
+    metrics.recordBuild(false, Date.now() - buildStartTime, true);
     return createErrorResponse(
       'ValidationError',
       errorMessage,
@@ -130,6 +135,9 @@ async function handleJSONMode(request: Request): Promise<Response> {
     // Clean up temporary files after response is created
     await cleanup();
 
+    // Record successful build
+    metrics.recordBuild(true, Date.now() - buildStartTime, false);
+
     return response;
 
   } catch (error) {
@@ -142,6 +150,9 @@ async function handleJSONMode(request: Request): Promise<Response> {
     if (cleanup) {
       await cleanup();
     }
+
+    // Record failed build
+    metrics.recordBuild(false, Date.now() - buildStartTime, false);
 
     return createErrorResponse(
       'BuildError',

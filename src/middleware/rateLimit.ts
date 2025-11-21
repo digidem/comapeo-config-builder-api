@@ -4,6 +4,7 @@
  */
 
 import { logger } from '../utils/logger';
+import { metrics } from '../controllers/metricsController';
 import type { Elysia } from 'elysia';
 
 interface RateLimitEntry {
@@ -206,6 +207,9 @@ export function rateLimitPlugin(config: RateLimitConfig): {
           clientIP,
           retryAfter: result.retryAfter
         });
+
+        // Record rate limit hit in metrics
+        metrics.recordRateLimitHit();
 
         set.status = 429;
         set.headers = {
