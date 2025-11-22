@@ -373,8 +373,38 @@ function validateFields(
       if (!field.options || field.options.length === 0) {
         errors.push(`Field ${field.id} of type ${field.type} must have options`);
       } else {
-        // Validate option iconIds
-        for (const option of field.options) {
+        // Validate each option's structure
+        const seenValues = new Set<string>();
+        for (let i = 0; i < field.options.length; i++) {
+          const option = field.options[i];
+
+          // Check that option is an object
+          if (!option || typeof option !== 'object') {
+            errors.push(`Field ${field.id} option at index ${i} must be an object`);
+            continue;
+          }
+
+          // Validate value is a non-empty string
+          if (typeof option.value !== 'string') {
+            errors.push(`Field ${field.id} option at index ${i} must have a string 'value' (got ${typeof option.value})`);
+          } else if (option.value.trim() === '') {
+            errors.push(`Field ${field.id} option at index ${i} must have a non-empty 'value'`);
+          } else {
+            // Check for duplicate values
+            if (seenValues.has(option.value)) {
+              errors.push(`Field ${field.id} has duplicate option value: "${option.value}"`);
+            }
+            seenValues.add(option.value);
+          }
+
+          // Validate label is a non-empty string
+          if (typeof option.label !== 'string') {
+            errors.push(`Field ${field.id} option at index ${i} must have a string 'label' (got ${typeof option.label})`);
+          } else if (option.label.trim() === '') {
+            errors.push(`Field ${field.id} option at index ${i} must have a non-empty 'label'`);
+          }
+
+          // Validate option iconId reference (if present)
           if (option.iconId && !iconIds.has(option.iconId)) {
             errors.push(`Field ${field.id} option "${option.value}" references non-existent iconId: ${option.iconId}`);
           }
