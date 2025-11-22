@@ -79,6 +79,77 @@ describe('Timeout Middleware', () => {
 
       await expect(wrappedHandler(request)).rejects.toThrow('Test error');
     });
+
+    it('should provide abort signal to handler', async () => {
+      let receivedSignal: AbortSignal | undefined;
+
+      const handler = async (request: Request, context: any) => {
+        receivedSignal = context.signal;
+        return new Response('Success', { status: 200 });
+      };
+
+      const wrappedHandler = withTimeout(handler, { timeoutMs: 1000 });
+      const request = new Request('http://localhost/test');
+      await wrappedHandler(request);
+
+      expect(receivedSignal).toBeDefined();
+      expect(receivedSignal instanceof AbortSignal).toBe(true);
+      expect(receivedSignal?.aborted).toBe(false);
+    });
+
+    it('should abort signal when timeout occurs', async () => {
+      let receivedSignal: AbortSignal | undefined;
+      const abortedPromise = new Promise<boolean>((resolve) => {
+        const slowHandler = async (request: Request, context: any) => {
+          receivedSignal = context.signal;
+
+          // Listen for abort event
+          context.signal.addEventListener('abort', () => {
+            resolve(true);
+          });
+
+          // Wait longer than timeout
+          await new Promise(r => setTimeout(r, 500));
+          return new Response('Should not reach here', { status: 200 });
+        };
+
+        const wrappedHandler = withTimeout(slowHandler, { timeoutMs: 100 });
+        const request = new Request('http://localhost/test');
+        wrappedHandler(request).catch(() => {
+          // Ignore - we just care about the abort signal
+        });
+      });
+
+      // Wait a bit to ensure abort happens
+      const wasAborted = await Promise.race([
+        abortedPromise,
+        new Promise<boolean>(resolve => setTimeout(() => resolve(false), 300))
+      ]);
+
+      expect(receivedSignal).toBeDefined();
+      expect(wasAborted).toBe(true); // Signal should have been aborted
+    });
+
+    it('should preserve additional context fields without overwriting signal', async () => {
+      let receivedContext: any;
+
+      const handler = async (request: Request, context: any) => {
+        receivedContext = context;
+        return new Response('Success', { status: 200 });
+      };
+
+      const wrappedHandler = withTimeout(handler, { timeoutMs: 1000 });
+      const request = new Request('http://localhost/test');
+
+      // Pass additional context with parsedBody
+      await wrappedHandler(request, { parsedBody: { test: 'data' } });
+
+      expect(receivedContext.signal).toBeDefined();
+      expect(receivedContext.signal instanceof AbortSignal).toBe(true);
+      expect(receivedContext.parsedBody).toEqual({ test: 'data' });
+      expect(receivedContext.startTime).toBeDefined();
+      expect(receivedContext.timeoutMs).toBe(1000);
+    });
   });
 
   describe('checkTimeout', () => {

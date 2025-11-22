@@ -84,9 +84,10 @@ export function createApp(): AppContext {
     const isJSONMode = contentType.toLowerCase().startsWith('application/json');
 
     // Pass the parsed body if available (JSON mode) via context
+    // IMPORTANT: Don't set signal here - withTimeout will provide the AbortController signal
     const requestContext = isJSONMode && context.body ?
-      { signal: undefined, parsedBody: context.body } :
-      { signal: undefined };
+      { parsedBody: context.body } :
+      undefined;
 
     return handleBuildWithTimeout(context.request, requestContext);
   });
