@@ -120,6 +120,43 @@ describe('URL Validator', () => {
       expect(result.error).toContain('private IP');
     });
 
+    // IPv4-mapped IPv6 SSRF bypass tests
+    it('should reject IPv4-mapped IPv6 loopback (::ffff:127.0.0.1)', () => {
+      const result = validateIconUrl('http://[::ffff:127.0.0.1]/icon.svg');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('private IP');
+    });
+
+    it('should reject IPv4-mapped IPv6 private IP 10.x', () => {
+      const result = validateIconUrl('http://[::ffff:10.0.0.1]/icon.svg');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('private IP');
+    });
+
+    it('should reject IPv4-mapped IPv6 private IP 192.168.x', () => {
+      const result = validateIconUrl('http://[::ffff:192.168.1.1]/icon.svg');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('private IP');
+    });
+
+    it('should reject IPv4-mapped IPv6 private IP 172.16.x', () => {
+      const result = validateIconUrl('http://[::ffff:172.16.0.1]/icon.svg');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('private IP');
+    });
+
+    it('should reject IPv4-mapped IPv6 AWS metadata endpoint', () => {
+      const result = validateIconUrl('http://[::ffff:169.254.169.254]/latest/meta-data/');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('private IP');
+    });
+
+    it('should reject IPv4-mapped IPv6 with case-insensitive prefix', () => {
+      const result = validateIconUrl('http://[::FFFF:127.0.0.1]/icon.svg');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('private IP');
+    });
+
     it('should handle URLs with ports', () => {
       const result = validateIconUrl('https://example.com:8080/icon.svg');
       expect(result.valid).toBe(true);

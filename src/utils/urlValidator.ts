@@ -39,6 +39,45 @@ const ALLOWED_PROTOCOLS = ['https:', 'http:'];
 const MAX_URL_LENGTH = 2048;
 
 /**
+ * Check if a hostname is an IPv4-mapped IPv6 address (::ffff:x.x.x.x)
+ * and extract the IPv4 portion if present
+ *
+ * Note: The URL class normalizes ::ffff:127.0.0.1 to [::ffff:7f00:1]
+ * where the IPv4 address is converted to hex. We need to handle both formats.
+ */
+function extractIPv4FromMappedIPv6(hostname: string): string | null {
+  // Remove brackets if present (URL.hostname includes them for IPv6)
+  const addr = hostname.replace(/^\[|\]$/g, '');
+
+  // Match ::ffff:XXXX:XXXX pattern (hex format after URL normalization)
+  // Example: ::ffff:7f00:1 (127.0.0.1) or ::ffff:a9fe:a9fe (169.254.169.254)
+  const hexMatch = addr.match(/^::ffff:([0-9a-f]+):([0-9a-f]+)$/i);
+  if (hexMatch) {
+    // Convert hex to IPv4
+    // First group is first two octets, second group is last two octets
+    const firstPart = parseInt(hexMatch[1], 16);
+    const secondPart = parseInt(hexMatch[2], 16);
+
+    // Split into 4 octets
+    const octet1 = (firstPart >> 8) & 0xff;
+    const octet2 = firstPart & 0xff;
+    const octet3 = (secondPart >> 8) & 0xff;
+    const octet4 = secondPart & 0xff;
+
+    return `${octet1}.${octet2}.${octet3}.${octet4}`;
+  }
+
+  // Also check for dotted decimal format (not normalized by URL class)
+  // This handles cases where the input bypassed normalization
+  const dottedMatch = addr.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  if (dottedMatch) {
+    return dottedMatch[1];
+  }
+
+  return null;
+}
+
+/**
  * Validates that a URL is safe to fetch (prevents SSRF attacks)
  */
 export function validateIconUrl(url: string): UrlValidationResult {
@@ -114,6 +153,19 @@ export function validateIconUrl(url: string): UrlValidationResult {
     };
   }
 
+  // Check for IPv4-mapped IPv6 addresses (::ffff:x.x.x.x)
+  // These can bypass the IPv4 blocklist if not normalized
+  const ipv4FromMapped = extractIPv4FromMappedIPv6(hostname);
+  if (ipv4FromMapped) {
+    // Check if the embedded IPv4 is blocked
+    if (isBlockedIP(ipv4FromMapped)) {
+      return {
+        valid: false,
+        error: 'Access to private IP ranges is not allowed'
+      };
+    }
+  }
+
   // Check for @ in username:password patterns (though URL class should normalize this)
   if (parsed.username || parsed.password) {
     return { valid: false, error: 'Invalid hostname' };
@@ -131,6 +183,13 @@ function isBlockedIP(ip: string): boolean {
   // Check exact matches
   if (BLOCKED_HOSTS.includes(ip)) {
     return true;
+  }
+
+  // Check for IPv4-mapped IPv6 and extract IPv4 portion
+  const ipv4FromMapped = extractIPv4FromMappedIPv6(ip);
+  if (ipv4FromMapped) {
+    // Recursively check the extracted IPv4
+    return isBlockedIP(ipv4FromMapped);
   }
 
   // Check IP ranges
