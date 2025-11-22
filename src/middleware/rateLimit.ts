@@ -53,6 +53,10 @@ class RateLimiter {
         logger.debug('Rate limiter cleanup', { deletedEntries: keysToDelete.length });
       }
     }, 60000); // 1 minute
+
+    // Don't keep the event loop alive just for this cleanup timer
+    // This allows short-lived scripts and tests to exit naturally
+    this.cleanupInterval.unref();
   }
 
   /**
