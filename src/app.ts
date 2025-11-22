@@ -16,6 +16,15 @@ export interface AppContext {
 /**
  * Create and configure the Elysia application
  * @returns The configured Elysia application and rate limiter instance
+ *
+ * Body size protection:
+ * - Content-Length header checked in buildController (rejects >10MB for JSON, >50MB for ZIP)
+ * - Bun runtime enforces default maximum request size (prevents unlimited chunked uploads)
+ * - ZIP mode uses streaming reader with chunk-by-chunk size enforcement
+ * - JSON mode relies on Bun's parsing limits + Content-Length check
+ *
+ * Note: Chunked JSON uploads without Content-Length rely on Bun's internal limits.
+ * This is acceptable as Bun has reasonable defaults and large JSON configs are uncommon.
  */
 export function createApp(): AppContext {
   const app = new Elysia()

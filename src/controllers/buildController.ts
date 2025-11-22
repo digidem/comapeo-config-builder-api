@@ -150,7 +150,7 @@ export async function handleBuild(request: Request, context?: RequestContext): P
 
   try {
     if (isJSONMode) {
-      // JSON mode - use pre-parsed body from Elysia if available
+      // JSON mode - use parsed body from Elysia when available
       return await handleJSONMode(request, maxSize, context?.signal, context?.parsedBody);
     } else if (isZIPMode) {
       // Legacy ZIP mode - read body with size limit then parse
@@ -205,8 +205,8 @@ async function handleJSONMode(request: Request, maxSize: number, signal?: AbortS
   const buildStartTime = Date.now();
 
   // Parse JSON from request body
-  // If parsedBody is provided (from Elysia), use it directly
-  // Otherwise, parse from the request
+  // Use pre-parsed body from Elysia when available (normal case)
+  // Fall back to manual parsing for direct calls/tests
   let buildRequest: BuildRequest;
   try {
     // Check for abort signal
@@ -216,12 +216,26 @@ async function handleJSONMode(request: Request, maxSize: number, signal?: AbortS
 
     if (parsedBody !== undefined) {
       // Use pre-parsed body from Elysia
+      // Note: Size was already checked via Content-Length header in handleBuild
+      // Chunked uploads without Content-Length rely on Bun's internal limits
       buildRequest = parsedBody as BuildRequest;
     } else {
-      // Parse from request (for direct calls/tests)
-      buildRequest = await request.json() as BuildRequest;
+      // Fallback for direct calls/tests: read with size enforcement
+      const bodyBuffer = await readLimitedBody(request, maxSize, signal);
+
+      if (bodyBuffer.byteLength === 0) {
+        throw new Error('Empty request body');
+      }
+
+      // Decode and parse JSON
+      const bodyText = new TextDecoder().decode(bodyBuffer);
+      buildRequest = JSON.parse(bodyText) as BuildRequest;
     }
   } catch (error) {
+    // Re-throw size limit errors to be handled by caller
+    if (error instanceof Error && error.name === 'PayloadTooLarge') {
+      throw error;
+    }
     return createErrorResponse(
       'InvalidJSON',
       'Invalid JSON in request body',

@@ -400,5 +400,23 @@ describe('POST /build Integration Tests', () => {
 
       expect(response.status).toBe(400);
     });
+
+    it('should reject JSON body with Content-Length exceeding size limit', async () => {
+      // Test Content-Length header enforcement
+      const response = await app.handle(
+        new Request('http://localhost/build', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': '20000000' // 20MB - exceeds 10MB limit
+          },
+          body: JSON.stringify({ metadata: { name: 'Test', version: '1.0.0' }, categories: [], fields: [] })
+        })
+      );
+
+      expect(response.status).toBe(413);
+      const errorBody = await response.json();
+      expect(errorBody.error).toBe('PayloadTooLarge');
+    });
   });
 });
