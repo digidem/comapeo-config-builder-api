@@ -39,7 +39,6 @@ export function metricsMiddleware() {
       metrics.recordRequest(endpoint, status, duration);
       metrics.decrementActiveRequests();
 
-      // Return the error to be handled by error handler
-      return error;
+      // Don't return - allow error to propagate to error handler
     });
 }
