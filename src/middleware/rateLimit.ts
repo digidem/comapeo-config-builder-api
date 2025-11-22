@@ -224,15 +224,25 @@ export function createRateLimitMiddleware(config: RateLimitConfig) {
  * Elysia plugin for rate limiting
  * Returns both the plugin and the limiter instance for cleanup
  */
-export function rateLimitPlugin(config: RateLimitConfig): {
+export function rateLimitPlugin(config: RateLimitConfig, options?: {
+  excludePaths?: string[];
+}): {
   plugin: (app: Elysia) => Elysia;
   limiter: RateLimiter;
 } {
   const limiter = new RateLimiter(config);
+  const excludePaths = options?.excludePaths || [];
 
   const plugin = (app: Elysia): any => {
     return app.onBeforeHandle(async (context) => {
       const { request, set } = context;
+
+      // Skip rate limiting for excluded paths (health checks, metrics)
+      const url = new URL(request.url);
+      if (excludePaths.includes(url.pathname)) {
+        return; // Continue without rate limiting
+      }
+
       const clientIP = getClientIP(request, context);
       const result = limiter.isRateLimited(clientIP);
 

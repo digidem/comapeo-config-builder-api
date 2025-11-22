@@ -28,14 +28,17 @@ export function createApp(): AppContext {
   }
 
   // Add rate limiting if enabled (default: enabled in production)
+  // Exclude health and metrics endpoints from rate limiting
   const rateLimitEnabled = process.env.RATE_LIMIT_ENABLED !== 'false';
   if (rateLimitEnabled) {
-    const { plugin, limiter } = rateLimitPlugin(defaultRateLimitConfig);
+    const { plugin, limiter } = rateLimitPlugin(defaultRateLimitConfig, {
+      excludePaths: ['/health', '/health/detailed', '/metrics']
+    });
     app.use(plugin);
     rateLimiter = limiter;
   }
 
-  // Health check endpoints (no timeout or rate limiting needed)
+  // Health check endpoints (no timeout or rate limiting)
   app.get('/health', async () => {
     return handleHealthCheck();
   });
