@@ -9,7 +9,7 @@ import { withTimeout, defaultTimeoutConfig } from './middleware/timeout';
 import { metricsMiddleware } from './middleware/metricsMiddleware';
 
 export interface AppContext {
-  app: Elysia;
+  app: Elysia<any, any, any, any, any, any, any>;
   rateLimiter: RateLimiter | null;
 }
 
@@ -46,7 +46,7 @@ export function createApp(): AppContext {
   // Add metrics tracking middleware (before rate limiting)
   const metricsEnabled = process.env.METRICS_ENABLED !== 'false';
   if (metricsEnabled) {
-    metricsMiddleware(app);
+    app.use(metricsMiddleware());
   }
 
   // Add rate limiting if enabled (default: enabled in production)
