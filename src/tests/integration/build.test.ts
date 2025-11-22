@@ -353,7 +353,8 @@ describe('POST /build Integration Tests', () => {
       const formData = new FormData();
       const zip = new AdmZip();
       zip.addFile('metadata.json', Buffer.from('{"name":"Test","version":"1.0.0"}', 'utf-8'));
-      const blob = new Blob([zip.toBuffer()], { type: 'application/zip' });
+      // Convert Buffer to Uint8Array for proper BlobPart type compatibility
+      const blob = new Blob([new Uint8Array(zip.toBuffer())], { type: 'application/zip' });
       formData.append('file', blob, 'config.zip');
 
       const response = await app.handle(
