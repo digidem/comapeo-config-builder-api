@@ -15,6 +15,7 @@ export interface RequestContext {
   signal: AbortSignal;
   startTime: number;
   timeoutMs: number;
+  parsedBody?: unknown; // Optional pre-parsed body from Elysia (for JSON mode)
 }
 
 /**
@@ -44,8 +45,8 @@ function createTimeoutResponse(config: TimeoutConfig, elapsed: number): Response
 export function withTimeout(
   handler: (request: Request, context: RequestContext) => Promise<Response>,
   config: TimeoutConfig
-): (request: Request) => Promise<Response> {
-  return async (request: Request): Promise<Response> => {
+): (request: Request, additionalContext?: Partial<RequestContext>) => Promise<Response> {
+  return async (request: Request, additionalContext?: Partial<RequestContext>): Promise<Response> => {
     const startTime = Date.now();
     const controller = new AbortController();
     let timeoutId: Timer | null = null;
@@ -55,7 +56,8 @@ export function withTimeout(
     const context: RequestContext = {
       signal: controller.signal,
       startTime,
-      timeoutMs: config.timeoutMs
+      timeoutMs: config.timeoutMs,
+      ...additionalContext
     };
 
     // Start the handler immediately and store the promise

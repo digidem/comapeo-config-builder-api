@@ -18,7 +18,20 @@ export interface AppContext {
  * @returns The configured Elysia application and rate limiter instance
  */
 export function createApp(): AppContext {
-  const app = new Elysia().use(cors());
+  const app = new Elysia()
+    .use(cors())
+    .onError(({ code, error, set }) => {
+      // Handle JSON parse errors from Elysia
+      if (code === 'PARSE') {
+        set.status = 400;
+        return {
+          error: 'InvalidJSON',
+          message: 'Invalid JSON in request body'
+        };
+      }
+      // Let other errors propagate
+      throw error;
+    });
   let rateLimiter: RateLimiter | null = null;
 
   // Add metrics tracking middleware (before rate limiting)
@@ -55,8 +68,18 @@ export function createApp(): AppContext {
   // v2.0.0 Build endpoint - supports both JSON and ZIP modes
   // Wrapped with timeout protection (5 minutes default)
   const handleBuildWithTimeout = withTimeout(handleBuild, defaultTimeoutConfig);
-  app.post('/build', async ({ request }: { request: Request }) => {
-    return handleBuildWithTimeout(request);
+  app.post('/build', async (context) => {
+    // For JSON requests, Elysia auto-parses the body, so we pass it along
+    // For multipart (ZIP), we pass the raw request
+    const contentType = context.request.headers.get('Content-Type') || '';
+    const isJSONMode = contentType.toLowerCase().startsWith('application/json');
+
+    // Pass the parsed body if available (JSON mode) via context
+    const requestContext = isJSONMode && context.body ?
+      { signal: undefined, parsedBody: context.body } :
+      { signal: undefined };
+
+    return handleBuildWithTimeout(context.request, requestContext);
   });
 
   // Legacy endpoint (kept for backward compatibility)

@@ -125,11 +125,7 @@ async function readLimitedBody(request: Request, maxSize: number, signal?: Abort
  * @param context Optional request context with abort signal for timeout handling
  */
 export async function handleBuild(request: Request, context?: RequestContext): Promise<Response> {
-  // Clone the request to ensure we have a fresh body stream
-  // This prevents "Body already used" errors in some environments (e.g., Bun tests)
-  const clonedRequest = request.clone();
-
-  const contentType = clonedRequest.headers.get('Content-Type') || '';
+  const contentType = request.headers.get('Content-Type') || '';
 
   // Detect mode based on Content-Type (more robust parsing)
   const normalizedContentType = contentType.toLowerCase().split(';')[0].trim();
@@ -140,7 +136,7 @@ export async function handleBuild(request: Request, context?: RequestContext): P
   const maxSize = isJSONMode ? MAX_JSON_SIZE : MAX_ZIP_SIZE;
 
   // Early rejection if Content-Length header indicates oversized body
-  const contentLength = clonedRequest.headers.get('content-length');
+  const contentLength = request.headers.get('content-length');
   if (contentLength) {
     const size = parseInt(contentLength, 10);
     if (size > maxSize) {
@@ -154,11 +150,11 @@ export async function handleBuild(request: Request, context?: RequestContext): P
 
   try {
     if (isJSONMode) {
-      // JSON mode - read body with size limit then parse
-      return await handleJSONMode(clonedRequest, maxSize, context?.signal);
+      // JSON mode - use pre-parsed body from Elysia if available
+      return await handleJSONMode(request, maxSize, context?.signal, context?.parsedBody);
     } else if (isZIPMode) {
       // Legacy ZIP mode - read body with size limit then parse
-      return await handleZIPMode(clonedRequest, maxSize, context?.signal);
+      return await handleZIPMode(request, maxSize, context?.signal);
     } else {
       // Unknown mode
       return createErrorResponse(
@@ -203,12 +199,14 @@ export async function handleBuild(request: Request, context?: RequestContext): P
 /**
  * Handle JSON mode request
  */
-async function handleJSONMode(request: Request, maxSize: number, signal?: AbortSignal): Promise<Response> {
+async function handleJSONMode(request: Request, maxSize: number, signal?: AbortSignal, parsedBody?: unknown): Promise<Response> {
   logger.info('Processing JSON mode request', { mode: 'json' });
 
   const buildStartTime = Date.now();
 
-  // Read body with size limit enforcement, then parse JSON
+  // Parse JSON from request body
+  // If parsedBody is provided (from Elysia), use it directly
+  // Otherwise, parse from the request
   let buildRequest: BuildRequest;
   try {
     // Check for abort signal
@@ -216,21 +214,14 @@ async function handleJSONMode(request: Request, maxSize: number, signal?: AbortS
       throw new Error('Request aborted');
     }
 
-    // Read body as binary (preserves all bytes)
-    const bodyBuffer = await readLimitedBody(request, maxSize, signal);
-
-    if (bodyBuffer.byteLength === 0) {
-      throw new Error('Empty request body');
+    if (parsedBody !== undefined) {
+      // Use pre-parsed body from Elysia
+      buildRequest = parsedBody as BuildRequest;
+    } else {
+      // Parse from request (for direct calls/tests)
+      buildRequest = await request.json() as BuildRequest;
     }
-
-    // Decode binary to text for JSON parsing
-    const bodyText = new TextDecoder().decode(bodyBuffer);
-    buildRequest = JSON.parse(bodyText) as BuildRequest;
   } catch (error) {
-    // Re-throw size limit errors to be handled by caller
-    if (error instanceof Error && error.name === 'PayloadTooLarge') {
-      throw error;
-    }
     return createErrorResponse(
       'InvalidJSON',
       'Invalid JSON in request body',
