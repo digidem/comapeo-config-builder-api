@@ -31,7 +31,8 @@ const BLOCKED_IP_RANGES = [
   /^127\./,         // 127.0.0.0/8 (loopback)
   /^::1$/,          // IPv6 loopback
   /^fe80:/,         // IPv6 link-local
-  /^fc00:/,         // IPv6 unique local
+  /^fc00:/,         // IPv6 unique local (centrally assigned)
+  /^fd00:/,         // IPv6 unique local (locally assigned) - fc00::/7 includes both fc00::/8 and fd00::/8
 ];
 
 const ALLOWED_PROTOCOLS = ['https:', 'http:'];
