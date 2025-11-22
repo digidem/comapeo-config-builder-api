@@ -1,10 +1,10 @@
 import { createApp } from '../../app';
 
 // Create the app
-const app = createApp();
+const appContext = createApp();
 
 // Start the server
-const server = app.listen(3001);
+const server = appContext.app.listen(3001);
 
 console.log('Test server started on http://localhost:3001');
 console.log('Press Ctrl+C to stop the server');
