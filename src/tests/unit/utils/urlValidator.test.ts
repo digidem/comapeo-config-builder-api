@@ -1,7 +1,95 @@
 import { describe, it, expect } from 'bun:test';
-import { validateIconUrl, safeFetch } from '../../../utils/urlValidator';
+import { validateIconUrl, safeFetch, extractIPv4FromMappedIPv6 } from '../../../utils/urlValidator';
 
 describe('URL Validator', () => {
+  describe('extractIPv4FromMappedIPv6', () => {
+    describe('Hex format (URL-normalized)', () => {
+      it('should extract IPv4 from ::ffff:7f00:1 (127.0.0.1)', () => {
+        const result = extractIPv4FromMappedIPv6('[::ffff:7f00:1]');
+        expect(result).toBe('127.0.0.1');
+      });
+
+      it('should extract IPv4 from ::ffff:a00:1 (10.0.0.1)', () => {
+        const result = extractIPv4FromMappedIPv6('[::ffff:a00:1]');
+        expect(result).toBe('10.0.0.1');
+      });
+
+      it('should extract IPv4 from ::ffff:c0a8:101 (192.168.1.1)', () => {
+        const result = extractIPv4FromMappedIPv6('[::ffff:c0a8:101]');
+        expect(result).toBe('192.168.1.1');
+      });
+
+      it('should extract IPv4 from ::ffff:a9fe:a9fe (169.254.169.254)', () => {
+        const result = extractIPv4FromMappedIPv6('[::ffff:a9fe:a9fe]');
+        expect(result).toBe('169.254.169.254');
+      });
+
+      it('should extract IPv4 from ::ffff:808:808 (8.8.8.8)', () => {
+        const result = extractIPv4FromMappedIPv6('[::ffff:808:808]');
+        expect(result).toBe('8.8.8.8');
+      });
+
+      it('should handle hex format without brackets', () => {
+        const result = extractIPv4FromMappedIPv6('::ffff:7f00:1');
+        expect(result).toBe('127.0.0.1');
+      });
+
+      it('should be case-insensitive for hex', () => {
+        const result = extractIPv4FromMappedIPv6('[::FFFF:7F00:1]');
+        expect(result).toBe('127.0.0.1');
+      });
+    });
+
+    describe('Dotted decimal format', () => {
+      it('should extract IPv4 from ::ffff:127.0.0.1', () => {
+        const result = extractIPv4FromMappedIPv6('[::ffff:127.0.0.1]');
+        expect(result).toBe('127.0.0.1');
+      });
+
+      it('should extract IPv4 from ::ffff:10.0.0.1', () => {
+        const result = extractIPv4FromMappedIPv6('[::ffff:10.0.0.1]');
+        expect(result).toBe('10.0.0.1');
+      });
+
+      it('should handle dotted format without brackets', () => {
+        const result = extractIPv4FromMappedIPv6('::ffff:192.168.1.1');
+        expect(result).toBe('192.168.1.1');
+      });
+
+      it('should be case-insensitive for prefix', () => {
+        const result = extractIPv4FromMappedIPv6('[::FFFF:127.0.0.1]');
+        expect(result).toBe('127.0.0.1');
+      });
+    });
+
+    describe('Non-mapped addresses', () => {
+      it('should return null for regular IPv6 loopback', () => {
+        const result = extractIPv4FromMappedIPv6('[::1]');
+        expect(result).toBeNull();
+      });
+
+      it('should return null for IPv6 link-local', () => {
+        const result = extractIPv4FromMappedIPv6('[fe80::1]');
+        expect(result).toBeNull();
+      });
+
+      it('should return null for regular IPv4', () => {
+        const result = extractIPv4FromMappedIPv6('127.0.0.1');
+        expect(result).toBeNull();
+      });
+
+      it('should return null for empty string', () => {
+        const result = extractIPv4FromMappedIPv6('');
+        expect(result).toBeNull();
+      });
+
+      it('should return null for non-IP strings', () => {
+        const result = extractIPv4FromMappedIPv6('example.com');
+        expect(result).toBeNull();
+      });
+    });
+  });
+
   describe('validateIconUrl', () => {
     it('should accept valid HTTPS URLs', () => {
       const result = validateIconUrl('https://example.com/icon.svg');
@@ -155,6 +243,27 @@ describe('URL Validator', () => {
       const result = validateIconUrl('http://[::FFFF:127.0.0.1]/icon.svg');
       expect(result.valid).toBe(false);
       expect(result.error).toContain('private IP');
+    });
+
+    // Positive test cases - public IPs via IPv4-mapped IPv6 should work
+    it('should accept public IP via IPv4-mapped IPv6 dotted format (8.8.8.8)', () => {
+      const result = validateIconUrl('http://[::ffff:8.8.8.8]/icon.svg');
+      expect(result.valid).toBe(true);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should accept public IP via IPv4-mapped IPv6 hex format (8.8.8.8)', () => {
+      // URL class normalizes ::ffff:8.8.8.8 to [::ffff:808:808]
+      // Verify this works by testing with already-normalized format
+      const result = validateIconUrl('http://[::ffff:808:808]/icon.svg');
+      expect(result.valid).toBe(true);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should accept Cloudflare DNS via IPv4-mapped IPv6 (1.1.1.1)', () => {
+      const result = validateIconUrl('http://[::ffff:1.1.1.1]/icon.svg');
+      expect(result.valid).toBe(true);
+      expect(result.error).toBeUndefined();
     });
 
     it('should handle URLs with ports', () => {

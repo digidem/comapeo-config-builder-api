@@ -44,8 +44,10 @@ const MAX_URL_LENGTH = 2048;
  *
  * Note: The URL class normalizes ::ffff:127.0.0.1 to [::ffff:7f00:1]
  * where the IPv4 address is converted to hex. We need to handle both formats.
+ *
+ * @internal Exported for testing
  */
-function extractIPv4FromMappedIPv6(hostname: string): string | null {
+export function extractIPv4FromMappedIPv6(hostname: string): string | null {
   // Remove brackets if present (URL.hostname includes them for IPv6)
   const addr = hostname.replace(/^\[|\]$/g, '');
 
