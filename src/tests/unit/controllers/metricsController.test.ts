@@ -1,7 +1,38 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { MetricsCollector, handleMetrics } from '../../../controllers/metricsController';
+import { MetricsCollector, handleMetrics, escapePrometheusLabelValue } from '../../../controllers/metricsController';
 
 describe('Metrics Controller', () => {
+  describe('escapePrometheusLabelValue', () => {
+    it('should escape backslashes', () => {
+      expect(escapePrometheusLabelValue('path\\with\\backslashes')).toBe('path\\\\with\\\\backslashes');
+    });
+
+    it('should escape double quotes', () => {
+      expect(escapePrometheusLabelValue('path"with"quotes')).toBe('path\\"with\\"quotes');
+    });
+
+    it('should escape newlines', () => {
+      expect(escapePrometheusLabelValue('path\nwith\nnewlines')).toBe('path\\nwith\\nnewlines');
+    });
+
+    it('should escape multiple special characters', () => {
+      expect(escapePrometheusLabelValue('path\\with"quotes\nand newlines')).toBe('path\\\\with\\"quotes\\nand newlines');
+    });
+
+    it('should handle strings without special characters', () => {
+      expect(escapePrometheusLabelValue('/api/health')).toBe('/api/health');
+    });
+
+    it('should handle empty strings', () => {
+      expect(escapePrometheusLabelValue('')).toBe('');
+    });
+
+    it('should escape backslash before quote correctly', () => {
+      // Backslashes must be escaped first to avoid double-escaping
+      expect(escapePrometheusLabelValue('\\"')).toBe('\\\\\\"');
+    });
+  });
+
   let collector: MetricsCollector;
 
   beforeEach(() => {
@@ -39,6 +70,24 @@ describe('Metrics Controller', () => {
 
         expect(metrics).toContain('endpoint="/build"');
         expect(metrics).toContain('endpoint="/health"');
+      });
+
+      it('should escape special characters in endpoint labels', () => {
+        // Test endpoint with double quotes
+        collector.recordRequest('/path"with"quotes', 200, 100);
+        // Test endpoint with backslashes
+        collector.recordRequest('/path\\backslash', 200, 150);
+        // Test endpoint with newlines
+        collector.recordRequest('/path\nnewline', 404, 50);
+
+        const metrics = collector.getPrometheusMetrics();
+
+        // Verify quotes are escaped
+        expect(metrics).toContain('endpoint="/path\\"with\\"quotes"');
+        // Verify backslashes are escaped
+        expect(metrics).toContain('endpoint="/path\\\\backslash"');
+        // Verify newlines are escaped
+        expect(metrics).toContain('endpoint="/path\\nnewline"');
       });
 
       it('should limit duration history to prevent memory growth', () => {

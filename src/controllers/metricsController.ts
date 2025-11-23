@@ -3,6 +3,20 @@
  * Provides operational metrics for monitoring and alerting
  */
 
+/**
+ * Escape a string for use as a Prometheus label value
+ * Prometheus requires backslashes, quotes, and newlines to be escaped
+ * @param value - The label value to escape
+ * @returns Escaped label value safe for Prometheus exposition format
+ * @internal Exported for testing
+ */
+export function escapePrometheusLabelValue(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')  // Escape backslashes first
+    .replace(/"/g, '\\"')     // Escape double quotes
+    .replace(/\n/g, '\\n');   // Escape newlines
+}
+
 export class MetricsCollector {
   private requestCount: Map<string, Map<number, number>> = new Map(); // endpoint -> status -> count
   private requestDurations: Map<string, number[]> = new Map(); // endpoint -> durations[]
@@ -117,7 +131,8 @@ export class MetricsCollector {
     lines.push('# TYPE http_requests_total counter');
     for (const [endpoint, statusMap] of this.requestCount.entries()) {
       for (const [status, count] of statusMap.entries()) {
-        lines.push(`http_requests_total{endpoint="${endpoint}",status="${status}"} ${count}`);
+        const escapedEndpoint = escapePrometheusLabelValue(endpoint);
+        lines.push(`http_requests_total{endpoint="${escapedEndpoint}",status="${status}"} ${count}`);
       }
     }
     lines.push('');
@@ -130,13 +145,14 @@ export class MetricsCollector {
         const sorted = [...durations].sort((a, b) => a - b);
         const sum = durations.reduce((a, b) => a + b, 0);
         const count = durations.length;
+        const escapedEndpoint = escapePrometheusLabelValue(endpoint);
 
-        lines.push(`http_request_duration_ms{endpoint="${endpoint}",quantile="0.5"} ${this.percentile(sorted, 50)}`);
-        lines.push(`http_request_duration_ms{endpoint="${endpoint}",quantile="0.9"} ${this.percentile(sorted, 90)}`);
-        lines.push(`http_request_duration_ms{endpoint="${endpoint}",quantile="0.95"} ${this.percentile(sorted, 95)}`);
-        lines.push(`http_request_duration_ms{endpoint="${endpoint}",quantile="0.99"} ${this.percentile(sorted, 99)}`);
-        lines.push(`http_request_duration_ms_sum{endpoint="${endpoint}"} ${sum}`);
-        lines.push(`http_request_duration_ms_count{endpoint="${endpoint}"} ${count}`);
+        lines.push(`http_request_duration_ms{endpoint="${escapedEndpoint}",quantile="0.5"} ${this.percentile(sorted, 50)}`);
+        lines.push(`http_request_duration_ms{endpoint="${escapedEndpoint}",quantile="0.9"} ${this.percentile(sorted, 90)}`);
+        lines.push(`http_request_duration_ms{endpoint="${escapedEndpoint}",quantile="0.95"} ${this.percentile(sorted, 95)}`);
+        lines.push(`http_request_duration_ms{endpoint="${escapedEndpoint}",quantile="0.99"} ${this.percentile(sorted, 99)}`);
+        lines.push(`http_request_duration_ms_sum{endpoint="${escapedEndpoint}"} ${sum}`);
+        lines.push(`http_request_duration_ms_count{endpoint="${escapedEndpoint}"} ${count}`);
       }
     }
     lines.push('');
