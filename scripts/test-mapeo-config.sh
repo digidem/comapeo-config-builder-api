@@ -127,23 +127,50 @@ docker run -d -p "$API_PORT:3000" --name "$CONTAINER_NAME" comapeo-config-builde
 # Step 6: Wait for the container to be ready
 wait_for_container "$CONTAINER_NAME" "$API_PORT"
 
-# Step 7: Test the API with the prepared ZIP file
-info "Testing /v1 API with ZIP file on port $API_PORT..."
-RESPONSE=$(curl -s -X POST -F "file=@test-config.zip" "http://localhost:$API_PORT/v1" -o response.comapeocat -w "%{http_code}")
+# Step 7: Test the API with a minimal v2 payload (mapnik not required)
+info "Testing /v2 API (JSON) on port $API_PORT..."
+
+cat > /tmp/comapeo-v2-payload.json <<'EOF'
+{
+  "metadata": { "name": "docker-test", "version": "1.0.0" },
+  "categories": [
+    {
+      "id": "category-1",
+      "name": "Category 1",
+      "appliesTo": ["observation", "track"],
+      "tags": { "categoryId": "category-1" },
+      "fields": ["field-1"],
+      "track": true
+    }
+  ],
+  "fields": [
+    {
+      "id": "field-1",
+      "name": "Field 1",
+      "tagKey": "field-1",
+      "type": "text"
+    }
+  ],
+  "icons": [],
+  "translations": {
+    "en": { "labels": { "category-1": "Category 1" } }
+  }
+}
+EOF
+
+RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" -d @/tmp/comapeo-v2-payload.json "http://localhost:$API_PORT/v2" -o response.comapeocat -w "%{http_code}")
 
 if [ "$RESPONSE" == "200" ]; then
   info "Received comapeocat file with size: $(wc -c < response.comapeocat) bytes"
-  
-  # Check if the file is a valid ZIP file
   if unzip -t response.comapeocat >/dev/null 2>&1; then
-    success "Valid comapeocat file received"
+    success "Valid comapeocat file received (v2)"
     info "Contents of the comapeocat file:"
     unzip -l response.comapeocat
   else
-    error "Invalid comapeocat file received"
+    error "Invalid comapeocat file received (v2)"
   fi
 else
-  error "API test failed with status code: $RESPONSE"
+  error "API test failed with status code: $RESPONSE (v2)"
   error "Response details:"
   cat response.comapeocat
   docker logs "$CONTAINER_NAME"
