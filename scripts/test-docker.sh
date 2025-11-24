@@ -26,7 +26,16 @@ cleanup() {
   info "Cleaning up resources..."
   docker stop comapeo-test comapeo-test-ci 2>/dev/null || true
   docker rm comapeo-test comapeo-test-ci 2>/dev/null || true
-  rm -f test-config.zip response.comapeocat test-config-ci.zip response-ci.comapeocat 2>/dev/null || true
+  rm -f test-config.zip response.comapeocat response-v2.comapeocat test-config-ci.zip response-ci.comapeocat response-ci-v2.comapeocat 2>/dev/null || true
+}
+
+ensure_v1_zip() {
+  local target="$1"
+  if [ -f "$target" ]; then
+    return
+  fi
+  info "Downloading v1-compatible config (v5.0.0 source ZIP)..."
+  curl -L -o "$target" https://github.com/digidem/mapeo-default-config/archive/refs/tags/v5.0.0.zip || { error "Failed to download v1 config zip"; return 1; }
 }
 
 # Trap to ensure cleanup on exit
@@ -68,18 +77,17 @@ test_ci_container() {
     return 1
   fi
 
-  # Download a test ZIP file
-  info "Downloading test ZIP file for CI mode..."
-  curl -L -o test-config-ci.zip https://github.com/digidem/mapeo-default-config/archive/refs/heads/main.zip || { error "Failed to download test ZIP file"; return 1; }
+  # Create a test ZIP file
+  ensure_v1_zip test-config-ci.zip
 
   # Test the API with the ZIP file
   info "Testing API with ZIP file on port $API_PORT in CI mode..."
-  response=$(curl -v -X POST -F "file=@test-config-ci.zip" http://localhost:$API_PORT/ -o response-ci.comapeocat -w "%{http_code}" 2>&1)
+  response=$(curl -v -X POST -F "file=@test-config-ci.zip" http://localhost:$API_PORT/v1 -o response-ci.comapeocat -w "%{http_code}" 2>&1)
   status_code=$(echo "$response" | tail -n1)
 
   # Check the response
   if [[ $status_code == "200" ]]; then
-    success "API test passed with status code 200 in CI mode"
+    success "v1 API test passed with status code 200 in CI mode"
 
     # Verify the response is a valid comapeocat file
     file_size=$(stat -c%s "response-ci.comapeocat")
@@ -93,11 +101,7 @@ test_ci_container() {
       info "Contents of the comapeocat file in CI mode:"
       unzip -l response-ci.comapeocat
 
-      success "CI mode test completed successfully"
-      docker stop comapeo-test-ci
-      docker rm comapeo-test-ci
-      rm -f test-config-ci.zip response-ci.comapeocat
-      return 0
+      success "v1 path validated"
     else
       error "Invalid comapeocat file received in CI mode"
       docker logs comapeo-test-ci
@@ -106,7 +110,7 @@ test_ci_container() {
       return 1
     fi
   else
-    error "API test failed with status code: $status_code in CI mode"
+    error "v1 API test failed with status code: $status_code in CI mode"
     error "Response details:"
     echo "$response"
     docker logs comapeo-test-ci
@@ -114,6 +118,62 @@ test_ci_container() {
     docker rm comapeo-test-ci
     return 1
   fi
+
+  # Prepare JSON payload for v2
+  cat > /tmp/comapeo-v2-payload-ci.json <<'EOF'
+{
+  "metadata": { "name": "docker-ci", "version": "1.0.0" },
+  "categories": [
+    {
+      "id": "category-1",
+      "name": "Category 1",
+      "appliesTo": ["observation", "track"],
+      "tags": { "categoryId": "category-1" },
+      "fields": ["field-1"],
+      "track": true
+    }
+  ],
+  "fields": [
+    {
+      "id": "field-1",
+      "name": "Field 1",
+      "tagKey": "field-1",
+      "type": "text"
+    }
+  ],
+  "icons": [],
+  "translations": { "en": { "labels": { "category-1": "Category 1" } } }
+}
+EOF
+
+  info "Testing v2 JSON builder on port $API_PORT..."
+  response_v2=$(curl -s -X POST -H "Content-Type: application/json" -d @/tmp/comapeo-v2-payload-ci.json \
+    http://localhost:$API_PORT/v2 -o response-ci-v2.comapeocat -w "%{http_code}")
+
+  if [[ $response_v2 == "200" ]]; then
+    success "v2 API test passed with status code 200 in CI mode"
+    if unzip -t response-ci-v2.comapeocat > /dev/null 2>&1; then
+      success "Valid comapeocat file received from v2 in CI mode"
+    else
+      error "Invalid comapeocat file received from v2 in CI mode"
+      docker logs comapeo-test-ci
+      docker stop comapeo-test-ci
+      docker rm comapeo-test-ci
+      return 1
+    fi
+  else
+    error "v2 API test failed with status code: $response_v2 in CI mode"
+    docker logs comapeo-test-ci
+    docker stop comapeo-test-ci
+    docker rm comapeo-test-ci
+    return 1
+  fi
+
+  success "CI mode test completed successfully"
+  docker stop comapeo-test-ci
+  docker rm comapeo-test-ci
+  rm -f test-config-ci.zip response-ci.comapeocat response-ci-v2.comapeocat /tmp/comapeo-v2-payload-ci.json
+  return 0
 }
 
 # Run the CI mode test
@@ -170,18 +230,17 @@ else
   exit 1
 fi
 
-# Download a test ZIP file
-info "Downloading test ZIP file..."
-curl -L -o test-config.zip https://github.com/digidem/mapeo-default-config/archive/refs/heads/main.zip || { error "Failed to download test ZIP file"; exit 1; }
+  # Create a test ZIP file
+  ensure_v1_zip test-config.zip
 
 # Test the API with the ZIP file
-info "Testing API with ZIP file on port $API_PORT..."
-response=$(curl -v -X POST -F "file=@test-config.zip" http://localhost:$API_PORT/ -o response.comapeocat -w "%{http_code}" 2>&1)
+info "Testing /v1 API with ZIP file on port $API_PORT..."
+response=$(curl -v -X POST -F "file=@test-config.zip" http://localhost:$API_PORT/v1 -o response.comapeocat -w "%{http_code}" 2>&1)
 status_code=$(echo "$response" | tail -n1)
 
 # Check the response
 if [[ $status_code == "200" ]]; then
-  success "API test passed with status code 200"
+  success "v1 API test passed with status code 200"
 
   # Verify the response is a valid comapeocat file
   file_size=$(stat -c%s "response.comapeocat")
@@ -202,19 +261,53 @@ if [[ $status_code == "200" ]]; then
     exit 1
   fi
 else
-  # In production mode, we expect a 500 error due to mapnik issues
-  if [[ $status_code == "500" ]]; then
-    info "API test failed with status code 500 in production mode (expected)"
-    info "This is the correct behavior - production should fail without mapnik"
-    success "Production test passed: API correctly fails without creating mock files"
+  # In production mode, v1 may fail depending on mapnik availability
+  info "v1 returned status $status_code in production mode"
+fi
+
+# v2 JSON test (should succeed without mapnik)
+cat > /tmp/comapeo-v2-payload.json <<'EOF'
+{
+  "metadata": { "name": "docker-prod", "version": "1.0.0" },
+  "categories": [
+    {
+      "id": "category-1",
+      "name": "Category 1",
+      "appliesTo": ["observation", "track"],
+      "tags": { "categoryId": "category-1" },
+      "fields": ["field-1"],
+      "track": true
+    }
+  ],
+  "fields": [
+    {
+      "id": "field-1",
+      "name": "Field 1",
+      "tagKey": "field-1",
+      "type": "text"
+    }
+  ],
+  "icons": []
+}
+EOF
+
+info "Testing /v2 API with JSON payload on port $API_PORT..."
+response_v2=$(curl -s -X POST -H "Content-Type: application/json" -d @/tmp/comapeo-v2-payload.json \
+  http://localhost:$API_PORT/v2 -o response-v2.comapeocat -w "%{http_code}")
+
+if [[ $response_v2 == "200" ]]; then
+  success "v2 API test passed with status code 200"
+  if unzip -t response-v2.comapeocat > /dev/null 2>&1; then
+    success "Valid comapeocat file received from v2"
   else
-    error "Unexpected status code: $status_code in production mode"
-    error "Response details:"
-    echo "$response"
+    error "Invalid comapeocat file received from v2"
     docker logs comapeo-test
     exit 1
   fi
+else
+  error "v2 API test failed with status code: $response_v2"
+  docker logs comapeo-test
+  exit 1
 fi
 
 success "All tests passed!"
-

@@ -176,3 +176,5 @@ dist
 
 # Aider chat history
 .aider.chat.history.md
+fixtures/*.zip
+/tmp/comapeo-test-config.zip
