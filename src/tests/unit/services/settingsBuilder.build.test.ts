@@ -1,5 +1,5 @@
 import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
-import { buildSettings } from '../../../services/settingsBuilder';
+import { buildSettingsV1 } from '../../../services/settingsBuilder';
 import fs from 'fs/promises';
 
 describe('SettingsBuilder - Build Tests', () => {
@@ -10,6 +10,6 @@ describe('SettingsBuilder - Build Tests', () => {
   });
 
   it('should export buildSettings function', () => {
-    expect(typeof buildSettings).toBe('function');
+    expect(typeof buildSettingsV1).toBe('function');
   });
 });

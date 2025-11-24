@@ -25,6 +25,7 @@
     "@types/adm-zip": "^0.5.7",
     "adm-zip": "^0.5.16",
     "elysia": "^1.2.25",
+    "comapeocat": "1.1.0",
     "mapeo-settings-builder": "^6.0.0"
   },
   "resolutions": {
