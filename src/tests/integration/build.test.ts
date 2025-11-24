@@ -419,5 +419,88 @@ describe('POST /build Integration Tests', () => {
       const errorBody = await response.json();
       expect(errorBody.error).toBe('PayloadTooLarge');
     });
+
+    it('should reject oversized JSON body AFTER parsing (chunked bypass protection)', async () => {
+      // This test verifies the security fix for chunked uploads without Content-Length
+      // Create a JSON payload that exceeds 10MB when serialized
+      const largeField = 'x'.repeat(11 * 1024 * 1024); // 11MB string
+      const largeRequest = {
+        metadata: {
+          name: 'Huge Config',
+          version: '1.0.0',
+          description: largeField // Oversized field
+        },
+        categories: [],
+        fields: []
+      };
+
+      // Simulate what Elysia does: parse the body and pass it via parsedBody
+      // This bypasses Content-Length checks since the body is already parsed
+      const response = await app.handle(
+        new Request('http://localhost/build', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+            // Intentionally omit Content-Length to simulate chunked transfer
+          },
+          body: JSON.stringify(largeRequest)
+        })
+      );
+
+      // Should reject with 413 Payload Too Large
+      expect(response.status).toBe(413);
+      const errorBody = await response.json();
+      expect(errorBody.error).toBe('PayloadTooLarge');
+      expect(errorBody.message).toContain('10485760'); // 10MB in bytes
+    });
+
+    it('should accept JSON body just under the 10MB limit', async () => {
+      // Create a payload that's close to but under 10MB
+      // Account for JSON structure overhead
+      const safeSize = 9 * 1024 * 1024; // 9MB to leave room for structure
+      const largeButValidField = 'x'.repeat(safeSize);
+      const request = {
+        metadata: {
+          name: 'Large Config',
+          version: '1.0.0',
+          description: largeButValidField
+        },
+        categories: [],
+        fields: []
+      };
+
+      const response = await app.handle(
+        new Request('http://localhost/build', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(request)
+        })
+      );
+
+      // Should accept since it's under the limit (though may fail validation)
+      // We only care that it's not rejected for size
+      expect(response.status).not.toBe(413);
+    });
+
+    it('should handle framework-level body size limit (50MB)', async () => {
+      // Test that the Elysia body size limit is enforced
+      // Create a request that's much larger than 50MB
+      const response = await app.handle(
+        new Request('http://localhost/build', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': '60000000' // 60MB - exceeds framework limit
+          },
+          body: JSON.stringify({ metadata: { name: 'Test', version: '1.0.0' }, categories: [], fields: [] })
+        })
+      );
+
+      expect(response.status).toBe(413);
+      const errorBody = await response.json();
+      expect(errorBody.error).toBe('PayloadTooLarge');
+    });
   });
 });

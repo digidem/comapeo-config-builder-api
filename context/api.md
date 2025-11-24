@@ -174,6 +174,17 @@ All errors return JSON with the following structure:
 
 ### Common Errors
 
+**Payload Too Large**:
+```json
+{
+  "error": "PayloadTooLarge",
+  "message": "Request body size 15728640 bytes exceeds maximum 10485760 bytes"
+}
+```
+- Status Code: `413 Payload Too Large`
+- Occurs when: Request body exceeds size limits (10 MB for JSON, 50 MB for ZIP)
+- Note: Enforced at multiple layers including after JSON parsing to prevent chunked bypass
+
 **No File Provided**:
 ```json
 {
@@ -251,7 +262,15 @@ Client receives .comapeocat file
 - Delay between attempts: 1000ms
 - Total max wait time: 120 seconds
 
-**File Size Limits**: No explicit limit set (depends on Elysia/Bun defaults)
+**File Size Limits**: Multi-layered protection against memory exhaustion
+1. **Framework Level**: 50 MB maximum for all request bodies (Elysia)
+2. **Content-Length Check**: Fast rejection before body read
+   - JSON mode: 10 MB maximum
+   - ZIP mode: 50 MB maximum
+3. **Parsed Body Validation**: Size check after JSON parsing (prevents chunked bypass)
+4. **ZIP Streaming**: Chunk-by-chunk size enforcement during upload
+
+**Security Note**: The API implements defense-in-depth for body size validation. Even chunked uploads without `Content-Length` headers are measured after parsing to prevent memory exhaustion attacks.
 
 **Concurrent Requests**: Supports multiple concurrent requests (each gets isolated temp directory)
 

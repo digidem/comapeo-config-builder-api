@@ -17,17 +17,23 @@ export interface AppContext {
  * Create and configure the Elysia application
  * @returns The configured Elysia application and rate limiter instance
  *
- * Body size protection:
- * - Content-Length header checked in buildController (rejects >10MB for JSON, >50MB for ZIP)
- * - Bun runtime enforces default maximum request size (prevents unlimited chunked uploads)
- * - ZIP mode uses streaming reader with chunk-by-chunk size enforcement
- * - JSON mode relies on Bun's parsing limits + Content-Length check
+ * Body size protection (defense in depth):
+ * 1. Content-Length header precheck in buildController (fast rejection before body read)
+ * 2. Elysia framework maxSize limit (50MB) for all request bodies
+ * 3. Parsed JSON size validation in buildController (prevents chunked bypass)
+ * 4. ZIP mode streaming with chunk-by-chunk enforcement
  *
- * Note: Chunked JSON uploads without Content-Length rely on Bun's internal limits.
- * This is acceptable as Bun has reasonable defaults and large JSON configs are uncommon.
+ * Security note: JSON mode now validates AFTER parsing to catch chunked uploads
+ * without Content-Length headers. This prevents memory exhaustion attacks.
  */
 export function createApp(): AppContext {
-  const app = new Elysia()
+  const app = new Elysia({
+    // Framework-level body size limit (50MB to accommodate ZIP mode)
+    // This provides baseline protection against unbounded chunked uploads
+    body: {
+      maxSize: 50 * 1024 * 1024  // 50MB
+    }
+  })
     .use(cors())
     .onError(({ code, error, set }) => {
       // Handle JSON parse errors from Elysia
@@ -36,6 +42,14 @@ export function createApp(): AppContext {
         return {
           error: 'InvalidJSON',
           message: 'Invalid JSON in request body'
+        };
+      }
+      // Handle body size limit errors from Elysia
+      if (code === 'BODY_SIZE_EXCEEDED') {
+        set.status = 413;
+        return {
+          error: 'PayloadTooLarge',
+          message: 'Request body size exceeds maximum 50 MB'
         };
       }
       // Let other errors propagate

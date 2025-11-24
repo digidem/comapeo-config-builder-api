@@ -216,8 +216,14 @@ async function handleJSONMode(request: Request, maxSize: number, signal?: AbortS
 
     if (parsedBody !== undefined) {
       // Use pre-parsed body from Elysia
-      // Note: Size was already checked via Content-Length header in handleBuild
-      // Chunked uploads without Content-Length rely on Bun's internal limits
+      // CRITICAL SECURITY FIX: Measure the actual size of the parsed JSON
+      // This prevents chunked uploads without Content-Length from bypassing size limits
+      const serializedSize = Buffer.byteLength(JSON.stringify(parsedBody), 'utf8');
+      if (serializedSize > maxSize) {
+        const error = new Error(`Request body size ${serializedSize} bytes exceeds maximum ${maxSize} bytes`);
+        error.name = 'PayloadTooLarge';
+        throw error;
+      }
       buildRequest = parsedBody as BuildRequest;
     } else {
       // Fallback for direct calls/tests: read with size enforcement
