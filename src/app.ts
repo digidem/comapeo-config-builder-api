@@ -1,30 +1,125 @@
 import { Elysia, t } from 'elysia';
 import { cors } from "@elysiajs/cors";
 import { handleBuildSettings } from './controllers/settingsController';
+import { handleBuild } from './controllers/buildController';
+import { handleHealthCheck, handleDetailedHealthCheck } from './controllers/healthController';
+import { handleMetrics } from './controllers/metricsController';
+import { rateLimitPlugin, defaultRateLimitConfig, type RateLimiter } from './middleware/rateLimit';
+import { withTimeout, defaultTimeoutConfig } from './middleware/timeout';
+import { metricsMiddleware } from './middleware/metricsMiddleware';
+
+export interface AppContext {
+  app: Elysia<any, any, any, any, any, any, any>;
+  rateLimiter: RateLimiter | null;
+}
 
 /**
  * Create and configure the Elysia application
- * @returns The configured Elysia application
+ * @returns The configured Elysia application and rate limiter instance
+ *
+ * Body size protection (defense in depth):
+ * 1. Content-Length header precheck in buildController (fast rejection before body read)
+ * 2. Elysia framework maxSize limit (50MB) for all request bodies
+ * 3. Parsed JSON size validation in buildController (prevents chunked bypass)
+ * 4. ZIP mode streaming with chunk-by-chunk enforcement
+ *
+ * Security note: JSON mode now validates AFTER parsing to catch chunked uploads
+ * without Content-Length headers. This prevents memory exhaustion attacks.
  */
-export function createApp() {
-  const app = new Elysia().use(cors());
-
-  // Health check endpoint
-  app.get('/health', () => ({
-    status: 'ok',
-    timestamp: new Date().toISOString()
-  }));
-
-  // Main build endpoint
-  app.post('/', async ({ body }: { body: { file: File } }) => {
-    body: t.Object({
-      file: t.File()
+export function createApp(): AppContext {
+  const app = new Elysia({
+    // Framework-level body size limit (50MB to accommodate ZIP mode)
+    // This provides baseline protection against unbounded chunked uploads
+    body: {
+      maxSize: 50 * 1024 * 1024  // 50MB
+    }
+  })
+    .use(cors())
+    .onError(({ code, error, set }) => {
+      // Handle JSON parse errors from Elysia
+      if (code === 'PARSE') {
+        set.status = 400;
+        return {
+          error: 'InvalidJSON',
+          message: 'Invalid JSON in request body'
+        };
+      }
+      // Handle body size limit errors from Elysia
+      if (code === 'BODY_SIZE_EXCEEDED') {
+        set.status = 413;
+        return {
+          error: 'PayloadTooLarge',
+          message: 'Request body size exceeds maximum 50 MB'
+        };
+      }
+      // Let other errors propagate
+      throw error;
     });
+  let rateLimiter: RateLimiter | null = null;
 
-    return handleBuildSettings(body.file);
+  // Add metrics tracking middleware (before rate limiting)
+  const metricsEnabled = process.env.METRICS_ENABLED !== 'false';
+  if (metricsEnabled) {
+    app.use(metricsMiddleware());
+  }
+
+  // Add rate limiting if enabled (default: enabled in production)
+  // Exclude health and metrics endpoints from rate limiting
+  const rateLimitEnabled = process.env.RATE_LIMIT_ENABLED !== 'false';
+  if (rateLimitEnabled) {
+    const { plugin, limiter } = rateLimitPlugin(defaultRateLimitConfig, {
+      excludePaths: ['/health', '/health/detailed', '/metrics']
+    });
+    app.use(plugin);
+    rateLimiter = limiter;
+  }
+
+  // Health check endpoints (no timeout or rate limiting)
+  app.get('/health', async () => {
+    return handleHealthCheck();
   });
 
-  return app;
+  app.get('/health/detailed', async () => {
+    return handleDetailedHealthCheck();
+  });
+
+  // Metrics endpoint (Prometheus format)
+  app.get('/metrics', () => {
+    return handleMetrics();
+  });
+
+  // v2.0.0 Build endpoint - supports both JSON and ZIP modes
+  // Wrapped with timeout protection (5 minutes default)
+  const handleBuildWithTimeout = withTimeout(handleBuild, defaultTimeoutConfig);
+  app.post('/build', async (context) => {
+    // For JSON requests, Elysia auto-parses the body, so we pass it along
+    // For multipart (ZIP), we pass the raw request
+    const contentType = context.request.headers.get('Content-Type') || '';
+    const isJSONMode = contentType.toLowerCase().startsWith('application/json');
+
+    // Pass the parsed body if available (JSON mode) via context
+    // IMPORTANT: Don't set signal here - withTimeout will provide the AbortController signal
+    const requestContext = isJSONMode && context.body ?
+      { parsedBody: context.body } :
+      undefined;
+
+    return handleBuildWithTimeout(context.request, requestContext);
+  });
+
+  // Legacy endpoint (kept for backward compatibility)
+  // Also wrapped with timeout protection
+  app.post('/', async ({ body }: any) => {
+    return withTimeout(
+      async (_request, context) => handleBuildSettings(body.file, { signal: context.signal }),
+      defaultTimeoutConfig
+    )(new Request('http://localhost/'));
+  }, {
+    body: t.Object({
+      file: t.File()
+    })
+  });
+
+  return { app, rateLimiter };
 }
 
-export type App = ReturnType<typeof createApp>;
+export type App = ReturnType<typeof createApp>['app'];
