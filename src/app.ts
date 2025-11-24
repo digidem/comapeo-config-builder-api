@@ -40,9 +40,21 @@ export function createApp() {
     body: t.Object({ file: t.File() })
   });
 
-  // v2 route (JSON body)
-  app.post('/v2', async ({ body }) => {
+  // v2 route (JSON body with validation)
+  app.post('/v2', async ({ body, headers }) => {
+    const contentType = headers['content-type'] || '';
+    if (!contentType.includes('application/json')) {
+      throw new Error('Content-Type must be application/json');
+    }
     return handleBuildSettingsV2(body as any);
+  }, {
+    body: t.Any(),
+    beforeHandle: ({ request }) => {
+      const contentLength = request.headers.get('content-length');
+      if (contentLength && parseInt(contentLength) > 1_000_000) {
+        throw new Error('Request body too large (max 1MB)');
+      }
+    }
   });
 
   return app;

@@ -64,12 +64,18 @@ export async function buildComapeoCatV2(payload: BuildRequestV2): Promise<BuildR
   const fileName = `${payload.metadata.name}-${payload.metadata.version || 'v2'}.comapeocat`;
   const outputPath = path.join(tmpDir, fileName);
 
-  const outputStream = normalizeToNodeStream(writer.outputStream);
-  const streamPromise = pipeline(outputStream, createWriteStream(outputPath));
-  await writer.finish();
-  await streamPromise;
+  try {
+    const outputStream = normalizeToNodeStream(writer.outputStream);
+    const streamPromise = pipeline(outputStream, createWriteStream(outputPath));
+    await writer.finish();
+    await streamPromise;
 
-  return { outputPath, fileName };
+    return { outputPath, fileName };
+  } catch (error) {
+    // Clean up temp directory on failure
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
 }
 
 async function transformPayload(payload: BuildRequestV2) {
@@ -244,8 +250,11 @@ function deriveCategorySelection(categories: MappedCategory[]) {
   const observation = categories.map((c) => c.id);
   const track = categories.filter((c) => c.track).map((c) => c.id);
 
+  // If no categories have track=true, default to including all categories in track selection
+  // This allows observation-only configs but provides sensible default for track
   if (track.length === 0) {
-    throw new ValidationError('Track category selection would be empty; provide at least one category with track=true');
+    console.warn('No categories marked with track=true, defaulting all categories to track selection');
+    return { observation, track: observation };
   }
 
   return { observation, track };
