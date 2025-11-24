@@ -69,7 +69,7 @@ wait_for_container() {
   # Wait for health endpoint to be available
   info "Checking health endpoint on port $port..."
   for ((i=1; i<=max_attempts; i++)); do
-    if curl -s "http://localhost:$port/" >/dev/null 2>&1; then
+    if curl -s "http://localhost:$port/health" >/dev/null 2>&1; then
       success "Health check passed"
       return 0
     fi
@@ -104,8 +104,8 @@ info "Building Docker image..."
 docker build -t comapeo-config-builder-api:test . || error "Docker build failed"
 
 # Step 2: Download the mapeo-default-config repository
-info "Downloading mapeo-default-config repository..."
-curl -L -o "$TEMP_DIR/mapeo-default-config.zip" https://github.com/digidem/mapeo-default-config/archive/refs/heads/main.zip || error "Failed to download mapeo-default-config"
+info "Downloading mapeo-default-config v5.0.0 (compatible with /v1)..."
+curl -L -o "$TEMP_DIR/mapeo-default-config.zip" https://github.com/digidem/mapeo-default-config/archive/refs/tags/v5.0.0.zip || error "Failed to download mapeo-default-config"
 
 # Step 3: Unzip the repository
 info "Extracting mapeo-default-config repository..."
@@ -113,7 +113,7 @@ unzip -q "$TEMP_DIR/mapeo-default-config.zip" -d "$TEMP_DIR" || error "Failed to
 
 # Step 4: Create a properly formatted ZIP file
 info "Creating properly formatted ZIP file..."
-cd "$TEMP_DIR/mapeo-default-config-main" || error "Failed to change directory"
+cd "$TEMP_DIR/mapeo-default-config-5.0.0" || error "Failed to change directory"
 zip -r "$TEMP_DIR/test-config.zip" . || error "Failed to create test ZIP file"
 cd - >/dev/null || error "Failed to return to original directory"
 
@@ -128,8 +128,8 @@ docker run -d -p "$API_PORT:3000" --name "$CONTAINER_NAME" comapeo-config-builde
 wait_for_container "$CONTAINER_NAME" "$API_PORT"
 
 # Step 7: Test the API with the prepared ZIP file
-info "Testing API with ZIP file on port $API_PORT..."
-RESPONSE=$(curl -s -X POST -F "file=@test-config.zip" "http://localhost:$API_PORT/" -o response.comapeocat -w "%{http_code}")
+info "Testing /v1 API with ZIP file on port $API_PORT..."
+RESPONSE=$(curl -s -X POST -F "file=@test-config.zip" "http://localhost:$API_PORT/v1" -o response.comapeocat -w "%{http_code}")
 
 if [ "$RESPONSE" == "200" ]; then
   info "Received comapeocat file with size: $(wc -c < response.comapeocat) bytes"
