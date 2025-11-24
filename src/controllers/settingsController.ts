@@ -17,21 +17,48 @@ export async function handleBuildSettingsV1(file: File) {
 
   const zipBuffer = await file.arrayBuffer();
   const builtSettingsPath = await buildSettingsV1(zipBuffer);
-  const fileResponse = Bun.file(builtSettingsPath);
 
-  // Clean up temp directory after sending response (schedule async cleanup)
+  // Determine temp directory to clean up
   // builtSettingsPath is: /tmp/comapeo-settings-XXX/.../build/file.comapeocat
   // We want to remove: /tmp/comapeo-settings-XXX
   const pathParts = builtSettingsPath.split(path.sep);
   const tempDirIndex = pathParts.findIndex(part => part.startsWith('comapeo-settings-'));
-  if (tempDirIndex > 0) {
-    const tmpDir = pathParts.slice(0, tempDirIndex + 1).join(path.sep);
-    setImmediate(() => {
-      fs.rm(tmpDir, { recursive: true, force: true }).catch(console.error);
-    });
-  }
+  const tmpDir = tempDirIndex > 0 ? pathParts.slice(0, tempDirIndex + 1).join(path.sep) : null;
 
-  return fileResponse;
+  // Create a streaming response that cleans up after the file is sent
+  const bunFile = Bun.file(builtSettingsPath);
+  const originalStream = bunFile.stream();
+
+  // Wrap the stream to ensure cleanup happens after streaming completes
+  const reader = originalStream.getReader();
+  const cleanupStream = new ReadableStream({
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) {
+        controller.close();
+        // Clean up temp directory after streaming is complete
+        if (tmpDir) {
+          fs.rm(tmpDir, { recursive: true, force: true }).catch(console.error);
+        }
+      } else {
+        controller.enqueue(value);
+      }
+    },
+    cancel() {
+      // Clean up if the stream is cancelled/aborted
+      if (tmpDir) {
+        fs.rm(tmpDir, { recursive: true, force: true }).catch(console.error);
+      }
+    }
+  });
+
+  return new Response(cleanupStream, {
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${path.basename(builtSettingsPath)}"`,
+      'Content-Length': bunFile.size.toString(),
+    },
+  });
 }
 
 /**
@@ -43,13 +70,36 @@ export async function handleBuildSettingsV2(payload: BuildRequestV2) {
   }
 
   const result = await buildComapeoCatV2(payload);
-  const fileResponse = Bun.file(result.outputPath);
-
-  // Clean up temp directory after sending response (schedule async cleanup)
   const tmpDir = path.dirname(result.outputPath);
-  setImmediate(() => {
-    fs.rm(tmpDir, { recursive: true, force: true }).catch(console.error);
+
+  // Create a streaming response that cleans up after the file is sent
+  const bunFile = Bun.file(result.outputPath);
+  const originalStream = bunFile.stream();
+
+  // Wrap the stream to ensure cleanup happens after streaming completes
+  const reader = originalStream.getReader();
+  const cleanupStream = new ReadableStream({
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) {
+        controller.close();
+        // Clean up temp directory after streaming is complete
+        fs.rm(tmpDir, { recursive: true, force: true }).catch(console.error);
+      } else {
+        controller.enqueue(value);
+      }
+    },
+    cancel() {
+      // Clean up if the stream is cancelled/aborted
+      fs.rm(tmpDir, { recursive: true, force: true }).catch(console.error);
+    }
   });
 
-  return fileResponse;
+  return new Response(cleanupStream, {
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${path.basename(result.outputPath)}"`,
+      'Content-Length': bunFile.size.toString(),
+    },
+  });
 }
