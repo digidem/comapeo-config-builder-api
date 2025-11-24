@@ -66,4 +66,45 @@ describe('API routes', () => {
     const buffer = Buffer.from(await res.arrayBuffer());
     expect(buffer.toString()).toBe('v2-data');
   });
+
+  it('returns 400 for /v2 with invalid Content-Type', async () => {
+    const payload = {
+      metadata: { name: 'test' },
+      categories: [],
+      fields: [],
+    };
+
+    const res = await app.handle(
+      new Request('http://localhost/v2', {
+        method: 'POST',
+        headers: { 'content-type': 'text/plain' },
+        body: JSON.stringify(payload),
+      })
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('ValidationError');
+    expect(body.message).toContain('Content-Type must be application/json');
+  });
+
+  it('returns 400 for /v2 with oversized body', async () => {
+    const largePayload = { data: 'x'.repeat(2_000_000) }; // 2MB > 1MB limit
+
+    const res = await app.handle(
+      new Request('http://localhost/v2', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(JSON.stringify(largePayload)).toString()
+        },
+        body: JSON.stringify(largePayload),
+      })
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('ValidationError');
+    expect(body.message).toContain('Request body too large');
+  });
 });

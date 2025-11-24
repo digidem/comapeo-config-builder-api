@@ -3,6 +3,7 @@ import { cors } from '@elysiajs/cors';
 import { handleBuildSettingsV1, handleBuildSettingsV2 } from './controllers/settingsController';
 import { logger } from './middleware/logger';
 import { errorHandler } from './middleware/errorHandler';
+import { ValidationError } from './types/errors';
 
 /**
  * Create and configure the Elysia application
@@ -44,7 +45,7 @@ export function createApp() {
   app.post('/v2', async ({ body, headers }) => {
     const contentType = headers['content-type'] || '';
     if (!contentType.includes('application/json')) {
-      throw new Error('Content-Type must be application/json');
+      throw new ValidationError('Content-Type must be application/json');
     }
     return handleBuildSettingsV2(body as any);
   }, {
@@ -52,7 +53,7 @@ export function createApp() {
     beforeHandle: ({ request }) => {
       const contentLength = request.headers.get('content-length');
       if (contentLength && parseInt(contentLength) > 1_000_000) {
-        throw new Error('Request body too large (max 1MB)');
+        throw new ValidationError('Request body too large (max 1MB)');
       }
     }
   });
