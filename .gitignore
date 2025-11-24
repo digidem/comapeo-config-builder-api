@@ -178,3 +178,4 @@ dist
 .aider.chat.history.md
 fixtures/*.zip
 /tmp/comapeo-test-config.zip
+test-config*.zip
