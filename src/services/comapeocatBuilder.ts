@@ -243,9 +243,9 @@ function buildAppliesTo(category: any): string[] {
   }
 
   const final = new Set<string>(base);
-  // Ensure observation is always present per selection rules
-  final.add('observation');
-  if (category.track) {
+  // Respect user-supplied appliesTo values
+  // Only add 'track' if category.track is true AND it's not already present
+  if (category.track && !final.has('track')) {
     final.add('track');
   }
 

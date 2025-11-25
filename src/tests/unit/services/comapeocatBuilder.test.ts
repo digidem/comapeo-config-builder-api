@@ -85,20 +85,26 @@ describe('comapeocatBuilder helpers', () => {
     expect(mapped.definition.appliesTo).toContain('observation');
   });
 
-  it('accepts valid appliesTo values: track only', () => {
+  it('respects user-supplied appliesTo: track only should stay track only', () => {
     const category = { id: 'cat', name: 'Cat', appliesTo: ['track'] };
     const mapped = __test__.mapCategory(category, 0);
     expect(mapped).toBeDefined();
-    expect(mapped.definition.appliesTo).toContain('track');
-    expect(mapped.definition.appliesTo).toContain('observation'); // observation is always added
+    expect(mapped.definition.appliesTo).toEqual(['track']);
   });
 
-  it('accepts valid appliesTo values: both observation and track', () => {
+  it('respects user-supplied appliesTo: observation only should stay observation only', () => {
+    const category = { id: 'cat', name: 'Cat', appliesTo: ['observation'] };
+    const mapped = __test__.mapCategory(category, 0);
+    expect(mapped).toBeDefined();
+    expect(mapped.definition.appliesTo).toEqual(['observation']);
+  });
+
+  it('respects user-supplied appliesTo: both observation and track', () => {
     const category = { id: 'cat', name: 'Cat', appliesTo: ['observation', 'track'] };
     const mapped = __test__.mapCategory(category, 0);
     expect(mapped).toBeDefined();
-    expect(mapped.definition.appliesTo).toContain('observation');
-    expect(mapped.definition.appliesTo).toContain('track');
+    // Should contain both in some order
+    expect(mapped.definition.appliesTo.sort()).toEqual(['observation', 'track']);
   });
 
   it('throws when icon exceeds size cap', async () => {
