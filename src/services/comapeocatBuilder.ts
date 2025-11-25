@@ -97,6 +97,11 @@ async function transformPayload(payload: BuildRequestV2) {
     throw new ValidationError('At least one field is required');
   }
 
+  // Validate icons is an array if provided (empty arrays are allowed since icons are optional)
+  if (payload.icons !== undefined && payload.icons !== null && !Array.isArray(payload.icons)) {
+    throw new ValidationError('icons must be an array');
+  }
+
   const icons = await Promise.all((payload.icons || []).map(resolveIcon));
   const fields = payload.fields.map(mapField);
   const categories = payload.categories.map((category, index) =>
@@ -358,7 +363,9 @@ function validateTranslations(translations: Record<string, unknown>) {
 
 function validateBcp47(lang: string): string {
   const trimmed = lang?.trim();
-  const bcp47Regex = /^[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]{2,8})*$/;
+  // Permissive regex for basic format checking - allows single-char extensions (u, t, x)
+  // Actual BCP-47 validation is done by Intl.getCanonicalLocales below
+  const bcp47Regex = /^[a-zA-Z][a-zA-Z0-9-]*$/;
   if (!trimmed || !bcp47Regex.test(trimmed)) {
     throw new ValidationError(`Invalid locale: ${lang}`);
   }
@@ -389,6 +396,11 @@ function enforceEntryCap(payload: BuildRequestV2) {
 
   if (!Array.isArray(fields)) {
     throw new ValidationError('At least one field is required');
+  }
+
+  // Validate icons is an array if provided (destructuring defaults to [] if missing)
+  if (!Array.isArray(icons)) {
+    throw new ValidationError('icons must be an array');
   }
 
   const optionsCount = fields.reduce((sum, f) => sum + (f.options?.length || 0), 0);

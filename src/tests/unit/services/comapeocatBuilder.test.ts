@@ -30,7 +30,28 @@ describe('comapeocatBuilder helpers', () => {
   });
 
   it('rejects invalid locales', () => {
-    expect(() => __test__.validateBcp47('not-a-locale')).toThrow(ValidationError);
+    expect(() => __test__.validateBcp47('')).toThrow(ValidationError);
+    expect(() => __test__.validateBcp47('   ')).toThrow(ValidationError);
+    expect(() => __test__.validateBcp47('123')).toThrow(ValidationError);
+  });
+
+  it('accepts valid BCP-47 tags with Unicode extensions', () => {
+    // Unicode locale extensions (u-) are widely used for calendar, numbering, etc.
+    expect(__test__.validateBcp47('en-US-u-ca-gregory')).toBe('en-US-u-ca-gregory');
+    expect(__test__.validateBcp47('es-419-u-nu-latn')).toBe('es-419-u-nu-latn');
+    expect(__test__.validateBcp47('de-DE-u-co-phonebk')).toBe('de-DE-u-co-phonebk');
+  });
+
+  it('accepts valid BCP-47 tags with private use extensions', () => {
+    // Private use extensions (x-) allow custom locale identifiers
+    expect(__test__.validateBcp47('en-x-custom')).toBe('en-x-custom');
+    expect(__test__.validateBcp47('fr-x-private')).toBe('fr-x-private');
+  });
+
+  it('accepts standard language-region tags', () => {
+    expect(__test__.validateBcp47('en-US')).toBe('en-US');
+    expect(__test__.validateBcp47('zh-Hans-CN')).toBe('zh-Hans-CN');
+    expect(__test__.validateBcp47('pt-BR')).toBe('pt-BR');
   });
 
   it('throws for unsupported field type via builder', async () => {
@@ -53,7 +74,15 @@ describe('comapeocatBuilder helpers', () => {
 
   it('throws when translations use invalid locale', async () => {
     const payload = createBasePayload();
-    payload.translations = { 'not-a-locale': { label: 'bad' } };
+    // Underscore is invalid in BCP-47 (should be hyphen)
+    payload.translations = { 'en_US': { label: 'bad' } };
+    await expect(buildComapeoCatV2(payload)).rejects.toThrow(ValidationError);
+  });
+
+  it('throws ValidationError when icons is an object instead of array', async () => {
+    const payload = createBasePayload();
+    // @ts-expect-error intentional invalid payload - icons should be array not object
+    payload.icons = { id: 'ico', svgData: '<svg/>' };
     await expect(buildComapeoCatV2(payload)).rejects.toThrow(ValidationError);
   });
 });
