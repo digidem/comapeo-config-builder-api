@@ -47,16 +47,26 @@ export async function buildComapeoCatV2(payload: BuildRequestV2): Promise<BuildR
   }
 
   for (const field of mapped.fields) {
-    writer.addField(field.id, field.definition);
+    // Cast to any to satisfy Writer's strict discriminated union type
+    // Runtime validation ensures type safety
+    writer.addField(field.id, field.definition as any);
   }
 
   for (const category of mapped.categories) {
-    writer.addCategory(category.id, category.definition);
+    // Cast tags to satisfy Writer's strict type requirement
+    const definition = {
+      ...category.definition,
+      tags: category.definition.tags as Record<string, string | number | boolean | null>,
+      addTags: category.definition.addTags as Record<string, string | number | boolean | null> | undefined,
+      removeTags: category.definition.removeTags as Record<string, string | number | boolean | null> | undefined,
+    };
+    writer.addCategory(category.id, definition);
   }
 
   if (mapped.translations) {
     for (const [lang, translations] of Object.entries(mapped.translations)) {
-      writer.addTranslations(lang, translations);
+      // Cast to satisfy Writer's type requirement - validateTranslations ensures correct structure
+      writer.addTranslations(lang, translations as Record<string, Record<string, string>>);
     }
   }
 

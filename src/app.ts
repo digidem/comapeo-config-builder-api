@@ -20,8 +20,9 @@ export function createApp() {
     // This hook runs before body parsing and returns a custom parser that
     // validates size during streaming, protecting against both Content-Length
     // and chunked encoding attacks
-    .onParse(async ({ request, contentType }) => {
+    .onParse(async ({ request }) => {
       const url = new URL(request.url);
+      const contentType = request.headers.get('content-type');
 
       // Only enforce for JSON POST requests to /v2 endpoint
       // Use startsWith to handle content-type with parameters (e.g., "application/json; charset=utf-8")
@@ -82,11 +83,10 @@ export function createApp() {
     timestamp: new Date().toISOString()
   }));
 
-  app.onAfterHandle(({ response, logResponse }) => {
-    if (logResponse && response instanceof Response) {
-      logResponse(response.status);
-    }
-  });
+  // onAfterHandle hook for future use
+  // app.onAfterHandle(({ response }) => {
+  //   // Response logging handled by logger middleware
+  // });
 
   const v1Route = async ({ body }: { body: { file: File } }) => {
     return handleBuildSettingsV1(body.file);

@@ -61,7 +61,7 @@ describe('comapeocatBuilder helpers', () => {
 
   it('throws when appliesTo is missing', async () => {
     const payload = createBasePayload();
-    // @ts-expect-error intentional invalid payload
+    // Intentionally delete appliesTo to test validation
     delete (payload.categories[0] as any).appliesTo;
     await expect(buildComapeoCatV2(payload)).rejects.toThrow(ValidationError);
   });
