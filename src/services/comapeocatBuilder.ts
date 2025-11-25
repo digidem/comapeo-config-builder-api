@@ -271,14 +271,11 @@ function normalizeTags(tags: any, categoryId: string): Record<string, unknown> {
 
 function deriveCategorySelection(categories: MappedCategory[]) {
   const observation = categories.map((c) => c.id);
-  const track = categories.filter((c) => c.track).map((c) => c.id);
-
-  // If no categories have track=true, default to including all categories in track selection
-  // This allows observation-only configs but provides sensible default for track
-  if (track.length === 0) {
-    console.warn('No categories marked with track=true, defaulting all categories to track selection');
-    return { observation, track: observation };
-  }
+  // Track selection should only include categories whose appliesTo includes 'track'
+  // The track flag is just a hint, but appliesTo is the authoritative field
+  const track = categories
+    .filter((c) => c.definition.appliesTo.includes('track'))
+    .map((c) => c.id);
 
   return { observation, track };
 }

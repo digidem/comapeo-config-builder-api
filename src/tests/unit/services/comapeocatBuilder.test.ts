@@ -231,6 +231,123 @@ describe('sanitizePathComponent security', () => {
   });
 });
 
+describe('deriveCategorySelection', () => {
+  it('includes only categories with appliesTo: track in track selection', () => {
+    const categories = [
+      {
+        id: 'obs-only',
+        definition: { name: 'Observation Only', appliesTo: ['observation'], tags: {}, fields: [] },
+        track: false,
+      },
+      {
+        id: 'track-enabled',
+        definition: { name: 'Track Enabled', appliesTo: ['observation', 'track'], tags: {}, fields: [] },
+        track: false,
+      },
+    ];
+
+    const selection = __test__.deriveCategorySelection(categories);
+
+    expect(selection.observation).toEqual(['obs-only', 'track-enabled']);
+    expect(selection.track).toEqual(['track-enabled']);
+  });
+
+  it('returns empty track selection when no categories have appliesTo: track', () => {
+    const categories = [
+      {
+        id: 'obs-1',
+        definition: { name: 'Observation 1', appliesTo: ['observation'], tags: {}, fields: [] },
+        track: false,
+      },
+      {
+        id: 'obs-2',
+        definition: { name: 'Observation 2', appliesTo: ['observation'], tags: {}, fields: [] },
+        track: false,
+      },
+    ];
+
+    const selection = __test__.deriveCategorySelection(categories);
+
+    expect(selection.observation).toEqual(['obs-1', 'obs-2']);
+    expect(selection.track).toEqual([]);
+  });
+
+  it('includes category with track=true in track selection when appliesTo includes track', () => {
+    const categories = [
+      {
+        id: 'track-cat',
+        definition: { name: 'Track Category', appliesTo: ['observation', 'track'], tags: {}, fields: [] },
+        track: true,
+      },
+    ];
+
+    const selection = __test__.deriveCategorySelection(categories);
+
+    expect(selection.observation).toEqual(['track-cat']);
+    expect(selection.track).toEqual(['track-cat']);
+  });
+
+  it('does not include observation-only category in track selection even with track=true', () => {
+    const categories = [
+      {
+        id: 'obs-only',
+        definition: { name: 'Observation Only', appliesTo: ['observation'], tags: {}, fields: [] },
+        track: true, // track flag should be ignored if appliesTo doesn't include 'track'
+      },
+    ];
+
+    const selection = __test__.deriveCategorySelection(categories);
+
+    expect(selection.observation).toEqual(['obs-only']);
+    expect(selection.track).toEqual([]);
+  });
+
+  it('includes track-only category in track selection', () => {
+    const categories = [
+      {
+        id: 'track-only',
+        definition: { name: 'Track Only', appliesTo: ['track'], tags: {}, fields: [] },
+        track: false,
+      },
+    ];
+
+    const selection = __test__.deriveCategorySelection(categories);
+
+    expect(selection.observation).toEqual(['track-only']);
+    expect(selection.track).toEqual(['track-only']);
+  });
+
+  it('handles mixed categories correctly', () => {
+    const categories = [
+      {
+        id: 'obs-1',
+        definition: { name: 'Observation 1', appliesTo: ['observation'], tags: {}, fields: [] },
+        track: false,
+      },
+      {
+        id: 'both-1',
+        definition: { name: 'Both 1', appliesTo: ['observation', 'track'], tags: {}, fields: [] },
+        track: false,
+      },
+      {
+        id: 'obs-2',
+        definition: { name: 'Observation 2', appliesTo: ['observation'], tags: {}, fields: [] },
+        track: true, // Should not affect track selection
+      },
+      {
+        id: 'both-2',
+        definition: { name: 'Both 2', appliesTo: ['track', 'observation'], tags: {}, fields: [] },
+        track: true,
+      },
+    ];
+
+    const selection = __test__.deriveCategorySelection(categories);
+
+    expect(selection.observation).toEqual(['obs-1', 'both-1', 'obs-2', 'both-2']);
+    expect(selection.track).toEqual(['both-1', 'both-2']);
+  });
+});
+
 function createBasePayload(options?: { fieldTypeOverride?: string }): BuildRequestV2 {
   return {
     metadata: { name: 'test', version: '1.0.0' },
