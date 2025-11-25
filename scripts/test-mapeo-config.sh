@@ -38,7 +38,8 @@ is_port_in_use() {
 find_available_port() {
   local port=$1
   while is_port_in_use "$port"; do
-    info "Port $port is already in use, trying next port..."
+    # Use echo to stderr directly to avoid polluting the return value
+    echo -e "${BLUE}[INFO]${NC} Port $port is already in use, trying next port..." >&2
     port=$((port + 1))
   done
   echo "$port"
