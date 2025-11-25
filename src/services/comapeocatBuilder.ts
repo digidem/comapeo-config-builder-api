@@ -60,10 +60,12 @@ export async function buildComapeoCatV2(payload: BuildRequestV2): Promise<BuildR
 
   writer.setCategorySelection(mapped.categorySelection);
 
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), config.tempDirPrefix));
+  // Validate path components BEFORE creating temp directory to prevent resource leaks
   const sanitizedName = sanitizePathComponent(payload.metadata.name);
   const sanitizedVersion = sanitizePathComponent(payload.metadata.version || 'v2');
   const fileName = `${sanitizedName}-${sanitizedVersion}.comapeocat`;
+
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), config.tempDirPrefix));
   const outputPath = path.join(tmpDir, fileName);
 
   try {

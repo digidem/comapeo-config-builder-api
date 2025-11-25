@@ -64,6 +64,52 @@ describe('sanitizePathComponent security', () => {
     expect(() => __test__.sanitizePathComponent('../tmp/evil')).toThrow('path separators');
   });
 
+  it('does not leak temp directories when sanitization fails', async () => {
+    const fs = await import('fs/promises');
+    const os = await import('os');
+    const path = await import('path');
+
+    // Count existing temp directories
+    const tmpDir = os.tmpdir();
+    const beforeDirs = await fs.readdir(tmpDir);
+    const beforeCount = beforeDirs.filter(d => d.startsWith('comapeo-settings-')).length;
+
+    // Attempt to build with invalid name containing path separator
+    const payload = createBasePayload();
+    payload.metadata.name = '../evil';
+
+    await expect(buildComapeoCatV2(payload)).rejects.toThrow(ValidationError);
+
+    // Verify no new temp directories were created
+    const afterDirs = await fs.readdir(tmpDir);
+    const afterCount = afterDirs.filter(d => d.startsWith('comapeo-settings-')).length;
+
+    expect(afterCount).toBe(beforeCount);
+  });
+
+  it('does not leak temp directories when version sanitization fails', async () => {
+    const fs = await import('fs/promises');
+    const os = await import('os');
+    const path = await import('path');
+
+    // Count existing temp directories
+    const tmpDir = os.tmpdir();
+    const beforeDirs = await fs.readdir(tmpDir);
+    const beforeCount = beforeDirs.filter(d => d.startsWith('comapeo-settings-')).length;
+
+    // Attempt to build with invalid version containing parent reference
+    const payload = createBasePayload();
+    payload.metadata.version = '..';
+
+    await expect(buildComapeoCatV2(payload)).rejects.toThrow(ValidationError);
+
+    // Verify no new temp directories were created
+    const afterDirs = await fs.readdir(tmpDir);
+    const afterCount = afterDirs.filter(d => d.startsWith('comapeo-settings-')).length;
+
+    expect(afterCount).toBe(beforeCount);
+  });
+
   it('rejects backslashes to prevent path traversal on Windows', () => {
     expect(() => __test__.sanitizePathComponent('..\\tmp\\evil')).toThrow(ValidationError);
     expect(() => __test__.sanitizePathComponent('..\\tmp\\evil')).toThrow('path separators');
