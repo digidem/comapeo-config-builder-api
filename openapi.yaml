@@ -1,0 +1,191 @@
+openapi: 3.1.0
+info:
+  title: comapeo-config-builder-api
+  version: "1.1.0"
+  description: |
+    Dual-mode builder API. `/v1` shells out to `mapeo-settings-builder` using a ZIP upload.
+    `/v2` validates JSON against the comapeocat 1.0 schema and streams output via `comapeocat@1.1.0` Writer.
+servers:
+  - url: http://localhost:3000
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+  /v1:
+    post:
+      summary: Legacy ZIP → mapeo-settings-builder
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Built .comapeocat file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+  /v2:
+    post:
+      summary: JSON → comapeocat Writer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuildRequestV2'
+      responses:
+        '200':
+          description: Built .comapeocat file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    Metadata:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        builderName:
+          type: string
+          example: comapeocat
+        builderVersion:
+          type: string
+          example: 1.1.0
+    Category:
+      type: object
+      required: [id, name, appliesTo]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        appliesTo:
+          type: array
+          items:
+            type: string
+            enum: [observation, track]
+        tags:
+          type: object
+          additionalProperties: true
+          description: Defaults to { categoryId: <id> } if missing/empty
+        fields:
+          type: array
+          items:
+            type: string
+        iconId:
+          type: string
+        color:
+          type: string
+        track:
+          type: boolean
+          description: When true, category is added to track selection (must be non-empty overall)
+    Field:
+      type: object
+      required: [id, type]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        label:
+          type: string
+        tagKey:
+          type: string
+        type:
+          type: string
+          enum: [text, number, selectOne, selectMultiple, select, multiselect, textarea, integer, boolean, date, datetime, photo, location]
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              value:
+                description: Arbitrary JSON value
+        placeholder:
+          type: string
+        helperText:
+          type: string
+        appearance:
+          type: string
+          enum: [singleline, multiline]
+    Icon:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        svgData:
+          type: string
+          description: Inline SVG (≤ 2 MB)
+        svgUrl:
+          type: string
+          format: uri
+          description: Remote SVG fetched server-side (timeout + content-type check)
+    BuildRequestV2:
+      type: object
+      required: [metadata, categories, fields]
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/Field'
+        icons:
+          type: array
+          items:
+            $ref: '#/components/schemas/Icon'
+        translations:
+          type: object
+          additionalProperties: true
+          description: Keys must be valid BCP-47; each translation blob ≤ 1 MB
+    Error:
+      type: object
+      properties:
+        status:
+          type: integer
+        error:
+          type: string
+        message:
+          type: string

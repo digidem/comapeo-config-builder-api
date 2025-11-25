@@ -1,13 +1,16 @@
 # Comapeo Config Builder API
 
-This project provides an API for building CoMapeo configuration settings using the `mapeo-settings-builder` tool. It accepts a ZIP file containing CoMapeo configuration files, processes it, and outputs a `.comapeocat` file. The API streamlines the process of converting raw configuration data into a format that can be directly used by CoMapeo applications.
+This project provides a dual-mode API for building CoMapeo configuration archives (`.comapeocat`).
+
+- `/v1` (legacy): accepts a ZIP upload and shells out to `mapeo-settings-builder` (unchanged behavior; root `/` aliases to `/v1`).
+- `/v2` (new): accepts a JSON payload and uses `comapeocat@1.1.0` Writer to produce a `.comapeocat` stream with stricter validation.
 
 Key features:
-- Accepts a ZIP file upload containing CoMapeo configuration settings
-- Utilizes the `mapeo-settings-builder` tool to process the configuration
-- Outputs a built `.comapeocat` file ready for use in CoMapeo
-- Robust error handling and validation
-- Comprehensive test coverage
+- Versioned routing: `/v1` (ZIP → CLI) and `/v2` (JSON → Writer); root `/` maps to `/v1` for backward compatibility.
+- `comapeocat` Writer with provenance (`builderName: "comapeocat"`, `builderVersion: 1.1.0`).
+- Validation caps: JSON ≤ 1 MB, SVG icons ≤ 2 MB, ≤ 10k total entries, BCP‑47 locales, required `appliesTo` and `tags` per category.
+- Automatic field/type mapping for legacy inputs (e.g., `boolean` → `selectOne` with Yes/No options).
+- Scripted tests for both versions (`scripts/test-api.sh`, `scripts/test-docker.sh`).
 
 ## Project Structure
 
@@ -54,10 +57,11 @@ Key features:
     bun install
     ```
 
-2. **Install `mapeo-settings-builder` globally:**
+2. **Install builders:**
 
     ```bash
     npm install -g mapeo-settings-builder
+    bun install   # pulls comapeocat@1.1.0
     ```
 
 3. **Run the application:**
@@ -113,12 +117,6 @@ bun run lint
 
 ## Usage
 
-Use the following `curl` command to POST a ZIP file to the API:
-
-```bash
-curl -X POST -H "Content-Type: multipart/form-data" -F "file=@config-cultural-monitoring.zip" --output config-cultural-monitoring.comapeocat http://localhost:3000/
-```
-
 ### API Endpoints
 
 #### Health Check
@@ -127,15 +125,71 @@ curl -X POST -H "Content-Type: multipart/form-data" -F "file=@config-cultural-mo
 GET /health
 ```
 
-Returns the health status of the API.
-
-#### Build Configuration
+#### v1 (legacy ZIP → mapeo-settings-builder)
 
 ```
-POST /
+POST /v1
+POST /           # alias to /v1
+Content-Type: multipart/form-data
+body: file=@config.zip
 ```
 
-Builds a Comapeo configuration file from a ZIP file.
+Example:
+
+```bash
+curl -X POST -F "file=@config.zip" -o out.comapeocat http://localhost:3000/v1
+```
+
+#### v2 (JSON → comapeocat Writer)
+
+```
+POST /v2
+Content-Type: application/json
+```
+
+Minimal payload:
+
+```json
+{
+  "metadata": { "name": "demo", "version": "1.0.0" },
+  "categories": [
+    {
+      "id": "cat-1",
+      "name": "Trees",
+      "appliesTo": ["observation", "track"],
+      "fields": ["field-1"],
+      "tags": { "categoryId": "cat-1" },
+      "track": true
+    }
+  ],
+  "fields": [
+    { "id": "field-1", "name": "Species", "tagKey": "species", "type": "select", "options": [{ "label": "Oak", "value": "oak" }] }
+  ],
+  "icons": [{ "id": "tree", "svgUrl": "https://example.com/tree.svg" }],
+  "translations": { "en": { "labels": { "cat-1": "Trees" } } }
+}
+```
+
+Field/type mapping rules (v2):
+
+- `select` → `selectOne`
+- `multiselect` → `selectMultiple`
+- `textarea` → `text`
+- `integer` → `number`
+- `boolean` → `selectOne` with options `{Yes:true, No:false}`
+- `date`/`datetime` → `text` (appearance `singleline`, helper "ISO date")
+- `photo`/`location` → `text`
+- Unsupported types → 400 error
+
+Category selection (v2): order-preserving; all categories → observation list; categories with `track: true` added to track list (must be non-empty).
+
+Limits (enforced server-side):
+
+- JSON payload ≤ 1 MB; translations per locale ≤ 1 MB
+- SVG icons ≤ 2 MB (inline `svgData` or fetched from `svgUrl` with content-type check & timeout)
+- Total entries ≤ 10,000
+- Categories require `appliesTo` and `tags` (defaults to `{ categoryId: <id> }` if tags missing/empty)
+- Locales validated as BCP‑47
 
 ## CI/CD
 

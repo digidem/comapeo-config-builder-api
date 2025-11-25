@@ -7,10 +7,11 @@ import { ValidationError, ProcessingError } from '../types/errors';
 export const errorHandler = (error: any) => {
   console.error(`[ERROR] ${error.name || 'Unknown'}: ${error.message || 'No message'}`);
 
-  if (error instanceof ValidationError) {
+  // Handle both ValidationError class instances and generic errors with ValidationError name
+  if (error instanceof ValidationError || error.name === 'ValidationError') {
     return new Response(JSON.stringify({
       status: 400,
-      error: error.name,
+      error: 'ValidationError',
       message: error.message
     }), {
       status: 400,
@@ -30,10 +31,23 @@ export const errorHandler = (error: any) => {
   }
 
   if (error instanceof ParseError) {
+    // Check if the underlying cause is a ValidationError (body size limit)
+    // When onParse throws ValidationError, Elysia wraps it in ParseError
+    if (error.cause instanceof ValidationError || error.cause?.name === 'ValidationError') {
+      return new Response(JSON.stringify({
+        status: 400,
+        error: 'ValidationError',
+        message: error.cause.message
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     return new Response(JSON.stringify({
       status: 400,
       error: error.name,
-      message: 'Invalid request format'
+      message: error.message === 'Bad Request' ? 'Invalid request format' : error.message
     }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' }
