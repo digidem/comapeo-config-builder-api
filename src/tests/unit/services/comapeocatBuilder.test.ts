@@ -58,6 +58,65 @@ describe('comapeocatBuilder helpers', () => {
   });
 });
 
+describe('sanitizePathComponent security', () => {
+  it('removes forward slashes to prevent path traversal', () => {
+    const sanitized = __test__.sanitizePathComponent('../tmp/evil');
+    expect(sanitized).toBe('__tmp_evil');
+    expect(sanitized).not.toContain('/');
+    expect(sanitized).not.toContain('..');
+  });
+
+  it('removes backslashes to prevent path traversal on Windows', () => {
+    const sanitized = __test__.sanitizePathComponent('..\\tmp\\evil');
+    expect(sanitized).toBe('__tmp_evil');
+    expect(sanitized).not.toContain('\\');
+    expect(sanitized).not.toContain('..');
+  });
+
+  it('removes null bytes', () => {
+    const sanitized = __test__.sanitizePathComponent('evil\0name');
+    expect(sanitized).toBe('evilname');
+    expect(sanitized).not.toContain('\0');
+  });
+
+  it('handles multiple path separators', () => {
+    const sanitized = __test__.sanitizePathComponent('///..//tmp');
+    expect(sanitized).toBe('______tmp');
+    expect(sanitized).not.toContain('/');
+    expect(sanitized).not.toContain('..');
+  });
+
+  it('throws on non-string input', () => {
+    expect(() => __test__.sanitizePathComponent(null as any)).toThrow(ValidationError);
+    expect(() => __test__.sanitizePathComponent(undefined as any)).toThrow(ValidationError);
+    expect(() => __test__.sanitizePathComponent(123 as any)).toThrow(ValidationError);
+  });
+
+  it('throws on empty string input', () => {
+    expect(() => __test__.sanitizePathComponent('')).toThrow(ValidationError);
+    expect(() => __test__.sanitizePathComponent('   ')).toThrow(ValidationError);
+  });
+
+  it('allows safe filenames to pass through', () => {
+    const sanitized = __test__.sanitizePathComponent('my-config');
+    expect(sanitized).toBe('my-config');
+  });
+
+  it('prevents path traversal in buildComapeoCatV2', async () => {
+    const payload = createBasePayload();
+    payload.metadata.name = '../tmp/evil';
+    payload.metadata.version = '../../etc/passwd';
+
+    const result = await buildComapeoCatV2(payload);
+
+    // Verify the fileName doesn't contain path separators
+    expect(result.fileName).not.toContain('/');
+    expect(result.fileName).not.toContain('\\');
+    expect(result.fileName).not.toContain('..');
+    expect(result.fileName).toBe('__tmp_evil-____etc_passwd.comapeocat');
+  });
+});
+
 function createBasePayload(options?: { fieldTypeOverride?: string }): BuildRequestV2 {
   return {
     metadata: { name: 'test', version: '1.0.0' },

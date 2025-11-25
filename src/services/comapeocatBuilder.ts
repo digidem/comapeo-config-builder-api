@@ -61,7 +61,9 @@ export async function buildComapeoCatV2(payload: BuildRequestV2): Promise<BuildR
   writer.setCategorySelection(mapped.categorySelection);
 
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), config.tempDirPrefix));
-  const fileName = `${payload.metadata.name}-${payload.metadata.version || 'v2'}.comapeocat`;
+  const sanitizedName = sanitizePathComponent(payload.metadata.name);
+  const sanitizedVersion = sanitizePathComponent(payload.metadata.version || 'v2');
+  const fileName = `${sanitizedName}-${sanitizedVersion}.comapeocat`;
   const outputPath = path.join(tmpDir, fileName);
 
   try {
@@ -399,6 +401,31 @@ function normalizeToNodeStream(streamLike: any) {
   throw new ProcessingError('Writer outputStream is not readable');
 }
 
+/**
+ * Sanitizes a string to be safe for use as a path component.
+ * Removes path separators and null bytes to prevent path traversal attacks.
+ * @param input - The string to sanitize
+ * @returns A sanitized string safe for use in file paths
+ */
+function sanitizePathComponent(input: string): string {
+  if (!input || typeof input !== 'string') {
+    throw new ValidationError('Path component must be a non-empty string');
+  }
+
+  // Remove path separators (/, \), parent directory references (..), and null bytes
+  const sanitized = input
+    .replace(/[/\\]/g, '_')        // Replace path separators with underscore
+    .replace(/\.\./g, '_')         // Replace .. with underscore
+    .replace(/\0/g, '')            // Remove null bytes
+    .trim();
+
+  if (sanitized.length === 0) {
+    throw new ValidationError('Path component cannot be empty after sanitization');
+  }
+
+  return sanitized;
+}
+
 export const __test__ = {
   mapField,
   mapFieldType,
@@ -408,4 +435,5 @@ export const __test__ = {
   normalizeTags,
   enforcePayloadSize,
   enforceEntryCap,
+  sanitizePathComponent,
 };
