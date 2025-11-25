@@ -232,6 +232,16 @@ function buildAppliesTo(category: any): string[] {
     throw new ValidationError(`Category ${category.id} must include appliesTo values`);
   }
 
+  // Validate that all appliesTo values are either "observation" or "track"
+  const allowedValues = new Set(['observation', 'track']);
+  for (const value of base) {
+    if (!allowedValues.has(value)) {
+      throw new ValidationError(
+        `Category ${category.id} appliesTo must only contain "observation" or "track", got "${value}"`
+      );
+    }
+  }
+
   const final = new Set<string>(base);
   // Ensure observation is always present per selection rules
   final.add('observation');

@@ -66,6 +66,41 @@ describe('comapeocatBuilder helpers', () => {
     await expect(buildComapeoCatV2(payload)).rejects.toThrow(ValidationError);
   });
 
+  it('throws when appliesTo contains invalid values', () => {
+    const category = { id: 'cat', name: 'Cat', appliesTo: ['foo'] };
+    expect(() => __test__.mapCategory(category, 0)).toThrow(ValidationError);
+    expect(() => __test__.mapCategory(category, 0)).toThrow('appliesTo must only contain "observation" or "track"');
+  });
+
+  it('throws when appliesTo contains mix of valid and invalid values', () => {
+    const category = { id: 'cat', name: 'Cat', appliesTo: ['observation', 'invalid', 'track'] };
+    expect(() => __test__.mapCategory(category, 0)).toThrow(ValidationError);
+    expect(() => __test__.mapCategory(category, 0)).toThrow('appliesTo must only contain "observation" or "track"');
+  });
+
+  it('accepts valid appliesTo values: observation only', () => {
+    const category = { id: 'cat', name: 'Cat', appliesTo: ['observation'] };
+    const mapped = __test__.mapCategory(category, 0);
+    expect(mapped).toBeDefined();
+    expect(mapped.definition.appliesTo).toContain('observation');
+  });
+
+  it('accepts valid appliesTo values: track only', () => {
+    const category = { id: 'cat', name: 'Cat', appliesTo: ['track'] };
+    const mapped = __test__.mapCategory(category, 0);
+    expect(mapped).toBeDefined();
+    expect(mapped.definition.appliesTo).toContain('track');
+    expect(mapped.definition.appliesTo).toContain('observation'); // observation is always added
+  });
+
+  it('accepts valid appliesTo values: both observation and track', () => {
+    const category = { id: 'cat', name: 'Cat', appliesTo: ['observation', 'track'] };
+    const mapped = __test__.mapCategory(category, 0);
+    expect(mapped).toBeDefined();
+    expect(mapped.definition.appliesTo).toContain('observation');
+    expect(mapped.definition.appliesTo).toContain('track');
+  });
+
   it('throws when icon exceeds size cap', async () => {
     const payload = createBasePayload();
     payload.icons = [{ id: 'big', svgData: 'a'.repeat(2_000_001) }];
