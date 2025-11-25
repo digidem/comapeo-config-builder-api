@@ -135,6 +135,29 @@ describe('API routes', () => {
     expect(body.message).toMatch(/too large|exceeds.*bytes/i);
   });
 
+  it('enforces size limit with content-type including charset parameter', async () => {
+    // This test exposes the security vulnerability: content-type with charset
+    // bypasses the streaming validation, allowing large payloads to be buffered
+    const largePayload = { data: 'x'.repeat(2_000_000) }; // 2MB > 1MB limit
+
+    const res = await app.handle(
+      new Request('http://localhost/v2', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json; charset=utf-8',
+          'content-length': Buffer.byteLength(JSON.stringify(largePayload)).toString()
+        },
+        body: JSON.stringify(largePayload),
+      })
+    );
+
+    // Should reject during streaming validation (not after full buffering)
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('ValidationError');
+    expect(body.message).toContain('Request body too large');
+  });
+
   it('prevents path traversal in /v2 endpoint', async () => {
     const payload = {
       metadata: { name: '../tmp/evil', version: '../../etc/passwd' },

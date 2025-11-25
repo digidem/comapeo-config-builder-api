@@ -24,7 +24,8 @@ export function createApp() {
       const url = new URL(request.url);
 
       // Only enforce for JSON POST requests to /v2 endpoint
-      if (request.method === 'POST' && url.pathname === '/v2' && contentType === 'application/json') {
+      // Use startsWith to handle content-type with parameters (e.g., "application/json; charset=utf-8")
+      if (request.method === 'POST' && url.pathname === '/v2' && contentType?.startsWith('application/json')) {
         const contentLength = request.headers.get('content-length');
 
         // If Content-Length header is present, validate before parsing
