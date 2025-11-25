@@ -16,22 +16,61 @@ export function createApp() {
     .use(cors())
     .use(logger)
     .onError(({ error }) => errorHandler(error))
-    // Layer 1 Defense: Enforce body size limit before route handler execution
-    // This validates size independent of Content-Length header (prevents chunked encoding bypass)
-    // Note: Due to Elysia limitations, we can't validate DURING streaming without error handling issues,
-    // but this still provides defense-in-depth by validating before the route handler runs
-    .onBeforeHandle(({ request, body }) => {
+    // Enforce body size limit DURING parsing to prevent DoS attacks
+    // This hook runs before body parsing and returns a custom parser that
+    // validates size during streaming, protecting against both Content-Length
+    // and chunked encoding attacks
+    .onParse(async ({ request, contentType }) => {
       const url = new URL(request.url);
-      const contentType = request.headers.get('content-type') || '';
 
       // Only enforce for JSON POST requests to /v2 endpoint
-      if (request.method === 'POST' && url.pathname === '/v2' && contentType.includes('application/json')) {
-        if (body) {
-          // Calculate actual JSON size (body is already parsed at this point)
-          const bodySize = Buffer.byteLength(JSON.stringify(body), 'utf-8');
-          if (bodySize > MAX_BODY_SIZE) {
+      if (request.method === 'POST' && url.pathname === '/v2' && contentType === 'application/json') {
+        const contentLength = request.headers.get('content-length');
+
+        // If Content-Length header is present, validate before parsing
+        if (contentLength) {
+          const size = Number.parseInt(contentLength, 10);
+          if (size > MAX_BODY_SIZE) {
             throw new ValidationError(`Request body too large (max ${MAX_BODY_SIZE} bytes)`);
           }
+        }
+
+        // For all requests (including chunked without Content-Length),
+        // read body with size enforcement during streaming
+        if (!request.body) {
+          return; // No body to parse
+        }
+
+        const reader = request.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let totalSize = 0;
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            totalSize += value.length;
+
+            // Enforce size limit during streaming - prevents memory exhaustion
+            if (totalSize > MAX_BODY_SIZE) {
+              reader.cancel(); // Stop reading immediately
+              throw new ValidationError(`Request body too large (max ${MAX_BODY_SIZE} bytes)`);
+            }
+
+            chunks.push(value);
+          }
+
+          // Combine chunks and parse JSON
+          const bodyText = Buffer.concat(chunks).toString('utf-8');
+          return JSON.parse(bodyText);
+        } catch (error) {
+          // Re-throw ValidationError as-is
+          if (error instanceof ValidationError) {
+            throw error;
+          }
+          // Wrap JSON parse errors
+          throw new ValidationError(`Invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
     });
@@ -63,7 +102,8 @@ export function createApp() {
   });
 
   // v2 route (JSON body with validation)
-  // Note: Body size is enforced in onParse hook before parsing to prevent DoS
+  // Note: Body size is enforced in onParse hook to prevent DoS attacks
+  // from both Content-Length and chunked encoding attacks
   app.post('/v2', async ({ body, headers }) => {
     const contentType = headers['content-type'] || '';
     if (!contentType.includes('application/json')) {

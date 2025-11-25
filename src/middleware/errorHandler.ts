@@ -31,6 +31,19 @@ export const errorHandler = (error: any) => {
   }
 
   if (error instanceof ParseError) {
+    // Check if the underlying cause is a ValidationError (body size limit)
+    // When onParse throws ValidationError, Elysia wraps it in ParseError
+    if (error.cause instanceof ValidationError || error.cause?.name === 'ValidationError') {
+      return new Response(JSON.stringify({
+        status: 400,
+        error: 'ValidationError',
+        message: error.cause.message
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     return new Response(JSON.stringify({
       status: 400,
       error: error.name,
