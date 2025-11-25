@@ -55,7 +55,8 @@ wait_for_container() {
   
   # Wait for container to be running
   for ((i=1; i<=max_attempts; i++)); do
-    if [ "$(docker inspect -f {{.State.Running}} "$container_name" 2>/dev/null)" == "true" ]; then
+    # docker inspect exits non-zero while container is starting/absent; suppress to avoid set -e abort
+    if [ "$(docker inspect -f {{.State.Running}} "$container_name" 2>/dev/null || true)" == "true" ]; then
       break
     fi
     
