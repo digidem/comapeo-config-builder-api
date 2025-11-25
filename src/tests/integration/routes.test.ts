@@ -127,16 +127,13 @@ describe('API routes', () => {
       })
     );
 
-    // Request should succeed with sanitized filenames
-    expect(res.status).toBe(200);
+    // Request should be rejected to prevent path traversal attacks
+    // This prevents malicious intent from being hidden in logs/debugging
+    expect(res.status).toBe(400);
 
-    // Verify Content-Disposition header has sanitized filename
-    const contentDisposition = res.headers.get('Content-Disposition');
-    expect(contentDisposition).toBeTruthy();
-    expect(contentDisposition).toContain('__tmp_evil-____etc_passwd.comapeocat');
-    expect(contentDisposition).not.toContain('/');
-    expect(contentDisposition).not.toContain('\\');
-    expect(contentDisposition).not.toContain('..');
+    const body = await res.json();
+    expect(body.error).toBe('ValidationError');
+    expect(body.message).toContain('path separators');
   });
 
   it('returns 400 for /v2 when fields is an object instead of array', async () => {

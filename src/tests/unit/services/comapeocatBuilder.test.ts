@@ -59,31 +59,29 @@ describe('comapeocatBuilder helpers', () => {
 });
 
 describe('sanitizePathComponent security', () => {
-  it('removes forward slashes to prevent path traversal', () => {
-    const sanitized = __test__.sanitizePathComponent('../tmp/evil');
-    expect(sanitized).toBe('__tmp_evil');
-    expect(sanitized).not.toContain('/');
-    expect(sanitized).not.toContain('..');
+  it('rejects forward slashes to prevent path traversal', () => {
+    expect(() => __test__.sanitizePathComponent('../tmp/evil')).toThrow(ValidationError);
+    expect(() => __test__.sanitizePathComponent('../tmp/evil')).toThrow('path separators');
   });
 
-  it('removes backslashes to prevent path traversal on Windows', () => {
-    const sanitized = __test__.sanitizePathComponent('..\\tmp\\evil');
-    expect(sanitized).toBe('__tmp_evil');
-    expect(sanitized).not.toContain('\\');
-    expect(sanitized).not.toContain('..');
+  it('rejects backslashes to prevent path traversal on Windows', () => {
+    expect(() => __test__.sanitizePathComponent('..\\tmp\\evil')).toThrow(ValidationError);
+    expect(() => __test__.sanitizePathComponent('..\\tmp\\evil')).toThrow('path separators');
   });
 
-  it('removes null bytes', () => {
-    const sanitized = __test__.sanitizePathComponent('evil\0name');
-    expect(sanitized).toBe('evilname');
-    expect(sanitized).not.toContain('\0');
+  it('rejects parent directory references', () => {
+    expect(() => __test__.sanitizePathComponent('evil..name')).toThrow(ValidationError);
+    expect(() => __test__.sanitizePathComponent('evil..name')).toThrow('parent directory');
   });
 
-  it('handles multiple path separators', () => {
-    const sanitized = __test__.sanitizePathComponent('///..//tmp');
-    expect(sanitized).toBe('______tmp');
-    expect(sanitized).not.toContain('/');
-    expect(sanitized).not.toContain('..');
+  it('rejects null bytes', () => {
+    expect(() => __test__.sanitizePathComponent('evil\0name')).toThrow(ValidationError);
+    expect(() => __test__.sanitizePathComponent('evil\0name')).toThrow('null bytes');
+  });
+
+  it('rejects multiple path separators', () => {
+    expect(() => __test__.sanitizePathComponent('///..//tmp')).toThrow(ValidationError);
+    expect(() => __test__.sanitizePathComponent('///..//tmp')).toThrow('path separators');
   });
 
   it('throws on non-string input', () => {
@@ -102,24 +100,18 @@ describe('sanitizePathComponent security', () => {
     expect(sanitized).toBe('my-config');
   });
 
-  it('sanitizes malicious path components in metadata', () => {
-    // Test that malicious path components are sanitized
-    const maliciousName = '../tmp/evil';
-    const maliciousVersion = '../../etc/passwd';
+  it('allows safe filenames with common characters', () => {
+    expect(__test__.sanitizePathComponent('my-config-v1.0')).toBe('my-config-v1.0');
+    expect(__test__.sanitizePathComponent('test_file')).toBe('test_file');
+    expect(__test__.sanitizePathComponent('Config-2024')).toBe('Config-2024');
+  });
 
-    const sanitizedName = __test__.sanitizePathComponent(maliciousName);
-    const sanitizedVersion = __test__.sanitizePathComponent(maliciousVersion);
-
-    // Verify sanitization removed path traversal attempts
-    expect(sanitizedName).toBe('__tmp_evil');
-    expect(sanitizedVersion).toBe('____etc_passwd');
-
-    // Verify the resulting filename would be safe
-    const fileName = `${sanitizedName}-${sanitizedVersion}.comapeocat`;
-    expect(fileName).toBe('__tmp_evil-____etc_passwd.comapeocat');
-    expect(fileName).not.toContain('/');
-    expect(fileName).not.toContain('\\');
-    expect(fileName).not.toContain('..');
+  it('rejects malicious path components to prevent hiding intent', () => {
+    // Explicitly reject malicious inputs rather than silently sanitizing
+    // This prevents attacks from being hidden in logs/debugging
+    expect(() => __test__.sanitizePathComponent('/etc/passwd')).toThrow(ValidationError);
+    expect(() => __test__.sanitizePathComponent('../../etc/passwd')).toThrow(ValidationError);
+    expect(() => __test__.sanitizePathComponent('C:\\Windows\\System32')).toThrow(ValidationError);
   });
 });
 

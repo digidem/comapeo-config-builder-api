@@ -415,7 +415,7 @@ function normalizeToNodeStream(streamLike: any) {
 
 /**
  * Sanitizes a string to be safe for use as a path component.
- * Removes path separators and null bytes to prevent path traversal attacks.
+ * Rejects inputs containing path separators or traversal patterns to prevent attacks.
  * @param input - The string to sanitize
  * @returns A sanitized string safe for use in file paths
  */
@@ -424,12 +424,22 @@ function sanitizePathComponent(input: string): string {
     throw new ValidationError('Path component must be a non-empty string');
   }
 
-  // Remove path separators (/, \), parent directory references (..), and null bytes
-  const sanitized = input
-    .replace(/[/\\]/g, '_')        // Replace path separators with underscore
-    .replace(/\.\./g, '_')         // Replace .. with underscore
-    .replace(/\0/g, '')            // Remove null bytes
-    .trim();
+  // Explicitly reject inputs containing path separators or traversal patterns
+  // This prevents malicious intent from being hidden by sanitization
+  if (/[/\\]/.test(input)) {
+    throw new ValidationError('Path component cannot contain path separators (/ or \\)');
+  }
+
+  if (/\.\./.test(input)) {
+    throw new ValidationError('Path component cannot contain parent directory references (..)');
+  }
+
+  if (/\0/.test(input)) {
+    throw new ValidationError('Path component cannot contain null bytes');
+  }
+
+  // Additional sanitization: remove any remaining potentially dangerous characters
+  const sanitized = input.trim();
 
   if (sanitized.length === 0) {
     throw new ValidationError('Path component cannot be empty after sanitization');
