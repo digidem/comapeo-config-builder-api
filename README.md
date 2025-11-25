@@ -1,154 +1,85 @@
 # Comapeo Config Builder API
 
-This project provides a dual-mode API for building CoMapeo configuration archives (`.comapeocat`).
+Dual-mode REST API for producing CoMapeo configuration archives (`.comapeocat`).
 
-- `/v1` (legacy): accepts a ZIP upload and shells out to `mapeo-settings-builder` (unchanged behavior; root `/` aliases to `/v1`).
-- `/v2` (new): accepts a JSON payload and uses `comapeocat@1.1.0` Writer to produce a `.comapeocat` stream with stricter validation.
+- `/v1` (legacy): accepts a ZIP upload and shells out to `mapeo-settings-builder` (root `/` aliases to `/v1`).
+- `/v2` (modern): accepts JSON and uses `comapeocat@1.1.0` Writer with strict validation and provenance metadata.
 
-Key features:
-- Versioned routing: `/v1` (ZIP → CLI) and `/v2` (JSON → Writer); root `/` maps to `/v1` for backward compatibility.
-- `comapeocat` Writer with provenance (`builderName: "comapeocat"`, `builderVersion: 1.1.0`).
-- Validation caps: JSON ≤ 1 MB, SVG icons ≤ 2 MB, ≤ 10k total entries, BCP‑47 locales, required `appliesTo` and `tags` per category.
-- Automatic field/type mapping for legacy inputs (e.g., `boolean` → `selectOne` with Yes/No options).
-- Scripted tests for both versions (`scripts/test-api.sh`, `scripts/test-docker.sh`).
+## Features
+- Bun-native (Elysia) server with TypeScript support.
+- Provenance in archives (`builderName: "comapeocat"`, `builderVersion: 1.1.0`).
+- Defense-in-depth validation: streaming body size enforcement, icon download limits, BCP‑47 locale checks, entry caps.
+- Legacy-friendly type mapping (`boolean` → `selectOne` Yes/No, etc.).
+- Scripted smoke tests for both endpoints (`scripts/test-api.sh`, Docker smoke in CI).
 
-## Project Structure
-
-- **src/**: Source code
-  - **config/**: Application configuration
-  - **controllers/**: API route handlers
-  - **middleware/**: Express middleware functions
-  - **services/**: Business logic
-  - **types/**: TypeScript type definitions
-  - **utils/**: Utility functions
-  - **tests/**: Test files
-    - **unit/**: Unit tests
-    - **integration/**: Integration tests
-    - **utils/**: Test utilities
+## Requirements
+- Bun ≥ 1.3.2 (1.0.16 inside the Docker image).
+- Node.js toolchain available for Docker builds.
+- Global dependency for v1: `npm install -g mapeo-settings-builder` (not needed if you only use v2).
 
 ## Installation
 
-### Using Docker
-
-1. **Pull the Docker image:**
-
-    ```bash
-    docker pull ghcr.io/digidem/comapeo-config-builder-api:latest
-    ```
-
-2. **Run the Docker container:**
-
-    ```bash
-    docker run -p 3000:3000 ghcr.io/digidem/comapeo-config-builder-api:latest
-    ```
-
-3. **Build and run locally:**
-
-    ```bash
-    docker build -t comapeo-config-builder-api:local .
-    docker run -p 3000:3000 comapeo-config-builder-api:local
-    ```
-
-### Using Bun
-
-1. **Install dependencies:**
-
-    ```bash
-    bun install
-    ```
-
-2. **Install builders:**
-
-    ```bash
-    npm install -g mapeo-settings-builder
-    bun install   # pulls comapeocat@1.1.0
-    ```
-
-3. **Run the application:**
-
-    ```bash
-    bun run dev
-    ```
-
-## Development
-
-### Running the API
-
+### Local (Bun)
 ```bash
-# Development mode with hot reload
+bun install           # installs comapeocat@1.1.0 and all deps
+npm install -g mapeo-settings-builder   # only if you need /v1
+```
+
+### Prebuilt Docker image (recommended)
+```bash
+docker pull communityfirst/comapeo-config-builder-api:latest
+docker run -p 3000:3000 communityfirst/comapeo-config-builder-api:latest
+```
+
+### Build your own image
+```bash
+docker build -t comapeo-config-builder-api:local .
+docker run -p 3000:3000 comapeo-config-builder-api:local
+```
+
+## Running
+```bash
+# Dev with hot reload
 bun run dev
 
-# Production mode
+# Production
 bun run start
 ```
 
-### Testing
-
+## Testing & Quality
 ```bash
-# Run all tests
-bun test
-
-# Run tests with coverage
-bun test --coverage
-
-# Run specific test files
-bun test src/tests/unit/utils/shell.test.ts
-
-# Test the API with a real ZIP file
-./scripts/test-api.sh
-
-# Test the API with a custom URL and ZIP file
-./scripts/test-api.sh --url http://localhost:3000 --file path/to/config.zip --output response.comapeocat
+bun test                          # all tests
+bun test src/tests/unit/utils/shell.test.ts   # single file
+./scripts/test-api.sh             # hits both endpoints (requires server running)
+bun run lint                      # Biome lint
+bun tsc --noEmit                  # TypeScript type-check
 ```
 
-### Building
+## API
 
-```bash
-# Build the project
-bun run build
-```
-
-### Linting
-
-```bash
-# Run linter
-bun run lint
-```
-
-## Usage
-
-### API Endpoints
-
-#### Health Check
-
+### Health
 ```
 GET /health
 ```
 
-#### v1 (legacy ZIP → mapeo-settings-builder)
-
+### v1 (ZIP → mapeo-settings-builder)
 ```
 POST /v1
-POST /           # alias to /v1
+POST /            # alias to /v1
 Content-Type: multipart/form-data
-body: file=@config.zip
+field: file=@config.zip
 ```
-
 Example:
-
 ```bash
 curl -X POST -F "file=@config.zip" -o out.comapeocat http://localhost:3000/v1
 ```
 
-#### v2 (JSON → comapeocat Writer)
-
+### v2 (JSON → comapeocat Writer)
 ```
 POST /v2
 Content-Type: application/json
 ```
-
-Minimal payload:
-
+Example payload:
 ```json
 {
   "metadata": { "name": "demo", "version": "1.0.0" },
@@ -170,36 +101,39 @@ Minimal payload:
 }
 ```
 
-Field/type mapping rules (v2):
-
+#### Field/type mapping (v2)
 - `select` → `selectOne`
 - `multiselect` → `selectMultiple`
 - `textarea` → `text`
 - `integer` → `number`
-- `boolean` → `selectOne` with options `{Yes:true, No:false}`
-- `date`/`datetime` → `text` (appearance `singleline`, helper "ISO date")
-- `photo`/`location` → `text`
-- Unsupported types → 400 error
+- `boolean` → `selectOne` with Yes/No options
+- `date`/`datetime`/`photo`/`location` → `text`
+- Unsupported types → 400
 
-Category selection (v2): order-preserving; all categories → observation list; categories with `track: true` added to track list (must be non-empty).
+#### Category selection (v2)
+- All categories appear in the observation list (order preserved).
+- Categories with `track: true` are added to the track list (must not be empty if any track is declared).
 
-Limits (enforced server-side):
+#### Limits & validation (v2)
+- JSON body ≤ 1 MB (enforced while streaming parse).
+- SVG icons ≤ 2 MB each; remote fetch timeout 5s; content-type check.
+- Total entries (categories + fields + icons + options + translations) ≤ 10,000.
+- Categories must include `appliesTo`; `tags` default to `{ categoryId: <id> }` when missing/empty.
+- Locales must be valid BCP‑47 (normalized via `Intl.getCanonicalLocales`).
+- Metadata `name`/`version` cannot contain path separators (path traversal guard).
 
-- JSON payload ≤ 1 MB; translations per locale ≤ 1 MB
-- SVG icons ≤ 2 MB (inline `svgData` or fetched from `svgUrl` with content-type check & timeout)
-- Total entries ≤ 10,000
-- Categories require `appliesTo` and `tags` (defaults to `{ categoryId: <id> }` if tags missing/empty)
-- Locales validated as BCP‑47
+## Project Structure
+- `src/index.ts` — entrypoint (reads `package.json` version, starts server).
+- `src/app.ts` — Elysia app factory, routes `/health`, `/`, `/v1`, `/v2`, streaming JSON parser/limits.
+- `src/controllers/` — request dispatchers.
+- `src/services/` — `settingsBuilder` (v1) and `comapeocatBuilder` (v2) implementations.
+- `src/middleware/` — logger, error handler.
+- `src/config/app.ts` — size/time limits and temp prefixes.
+- `scripts/` — API and Docker smoke tests.
 
 ## CI/CD
-
-The project uses GitHub Actions for continuous integration and deployment:
-
-- **CI Workflow**: Runs tests, type checking, and health checks on every push and pull request
-- **Docker Build, Test, and Deploy**: Builds the Docker image, tests it with real API requests, and deploys it to GitHub Container Registry
-- **Security Scan**: Checks for vulnerabilities in dependencies and Docker image
-- **Lint**: Ensures code quality and style consistency
+- `docker-test.yml`: lint + unit/integration on Bun 1.3.2, v2 API smoke, Docker smoke; PRs also publish a GHCR preview image `ghcr.io/<repo>:pr-<number>`.
+- `deploy.yml`: on `main`, run tests/lint/tsc then build & push `communityfirst/comapeo-config-builder-api:latest` to Docker Hub and sync its description.
 
 ## License
-
 MIT
