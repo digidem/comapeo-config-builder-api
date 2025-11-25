@@ -43,7 +43,7 @@ export async function buildComapeoCatV2(payload: BuildRequestV2): Promise<BuildR
   });
 
   for (const icon of mapped.icons) {
-    writer.addIcon(icon.id, icon.svg);
+    await writer.addIcon(icon.id, icon.svg);
   }
 
   for (const field of mapped.fields) {
@@ -217,13 +217,18 @@ function mapCategory(category: any, index: number): MappedCategory {
   const appliesTo = buildAppliesTo(category);
   const tags = normalizeTags(category.tags, category.id);
   const fields = category.fields || category.defaultFieldIds || [];
+  
+  let icon = category.icon || category.iconId;
+  if (icon && typeof icon === 'string' && !icon.endsWith('.svg')) {
+    icon = `${icon}.svg`;
+  }
 
   const definition = {
     name: category.name,
     appliesTo,
     tags,
     fields,
-    icon: category.icon || category.iconId,
+    icon,
     addTags: category.addTags,
     removeTags: category.removeTags,
     terms: category.terms,
@@ -294,19 +299,21 @@ function deriveCategorySelection(categories: MappedCategory[]) {
 
 async function resolveIcon(icon: any): Promise<MappedIcon> {
   if (!icon?.id) throw new ValidationError('Icon id is required');
+  
+  const id = icon.id.endsWith('.svg') ? icon.id : `${icon.id}.svg`;
 
   if (icon.svgData) {
-    enforceIconSize(icon.svgData, icon.id);
-    return { id: icon.id, svg: icon.svgData };
+    enforceIconSize(icon.svgData, id);
+    return { id, svg: icon.svgData };
   }
 
   if (icon.svgUrl) {
     const svg = await fetchIcon(icon.svgUrl);
-    enforceIconSize(svg, icon.id);
-    return { id: icon.id, svg };
+    enforceIconSize(svg, id);
+    return { id, svg };
   }
 
-  throw new ValidationError(`Icon ${icon.id} must include svgData or svgUrl`);
+  throw new ValidationError(`Icon ${id} must include svgData or svgUrl`);
 }
 
 function enforceIconSize(svg: string, iconId: string) {
