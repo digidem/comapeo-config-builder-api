@@ -11,7 +11,7 @@ This is a dual-mode REST API that processes CoMapeo configuration files. It prov
 
 Both endpoints return `.comapeocat` files ready for use in CoMapeo applications.
 
-**Runtime**: Bun (JavaScript runtime - v1.3.2 locally, v1.0.16 in Docker)
+**Runtime**: Bun (JavaScript runtime - v1.3.2 locally and in Docker)
 **Framework**: Elysia (Bun-native web framework)
 **Key Dependencies**:
 - `comapeocat@1.1.0` - Used by v2 endpoint for direct archive creation
@@ -207,7 +207,7 @@ Comprehensive documentation is organized into the following files:
 - ZIP handling: `adm-zip@^0.5.16`
 - v2 builder: `comapeocat@1.1.0`
 - v1 CLI: `mapeo-settings-builder@^6.0.0` (global install)
-- Runtime: Bun 1.0.16 (pinned in Docker), 1.3.2 (local dev)
+- Runtime: Bun 1.3.2 (pinned in Docker and used locally)
 
 ---
 
@@ -284,8 +284,8 @@ The v2 endpoint enforces strict validation to ensure data quality:
 
 ## Docker Notes
 
-- Base image: `node:18-bullseye-slim`
-- Installs Bun 1.0.16 and `mapeo-settings-builder` globally
+- Base image: `node:24-bookworm-slim`
+- Installs Bun 1.3.2 and `mapeo-settings-builder` globally
 - v1 endpoint may require mapnik (can fail in Docker)
 - v2 endpoint works reliably without additional dependencies
 - Exposes port 3000

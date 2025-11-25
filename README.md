@@ -13,8 +13,8 @@ Dual-mode REST API for producing CoMapeo configuration archives (`.comapeocat`).
 - Scripted smoke tests for both endpoints (`scripts/test-api.sh`, Docker smoke in CI).
 
 ## Requirements
-- Bun ≥ 1.3.2 (1.0.16 inside the Docker image).
-- Node.js toolchain available for Docker builds.
+- Bun ≥ 1.3.2 (1.3.2 inside the Docker image).
+- Node.js 24 LTS toolchain available for Docker builds.
 - Global dependency for v1: `npm install -g mapeo-settings-builder` (not needed if you only use v2).
 
 ## Installation

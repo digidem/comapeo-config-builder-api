@@ -5,6 +5,7 @@ import { buildSettingsV1 } from '../services/settingsBuilder';
 import { buildComapeoCatV2 } from '../services/comapeocatBuilder';
 import { ValidationError, ProcessingError } from '../types/errors';
 import type { BuildRequestV2 } from '../types/v2';
+import { config } from '../config/app';
 
 /**
  * Handle v1 request to build settings from a ZIP file
@@ -79,7 +80,7 @@ export async function handleBuildSettingsV2(payload: BuildRequestV2) {
 
   try {
     const reader = new Reader(result.outputPath);
-    const validationResult = await reader.validate();
+    const validationResult = await validateComapeocatWithTimeout(reader, result.outputPath);
     if (Array.isArray(validationResult) && validationResult.length > 0) {
       // Validation failed
       const errors = validationResult.map(e => `${e.message} at ${e.filePath || 'unknown file'}`).join('\n');
@@ -129,4 +130,21 @@ export async function handleBuildSettingsV2(payload: BuildRequestV2) {
       'Content-Length': bunFile.size.toString(),
     },
   });
+}
+
+async function validateComapeocatWithTimeout(reader: Reader, outputPath: string) {
+  const timeoutMs = config.validationTimeoutMs;
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new ProcessingError(`.comapeocat validation timed out after ${timeoutMs}ms for ${outputPath}`));
+      }, timeoutMs);
+    });
+
+    return await Promise.race([reader.validate(), timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }

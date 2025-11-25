@@ -12,6 +12,11 @@ export const config = {
   tempDirPrefix: 'comapeo-settings-',
   maxAttempts: 120,
   delayBetweenAttempts: 1000,
+  jsonByteLimit: 1_000_000, // 1 MB JSON payload cap (v2)
+  iconByteLimit: 2_000_000, // 2 MB SVG cap
+  maxEntries: 10_000, // Max categories + fields
+  iconFetchTimeoutMs: 5000, // Remote icon fetch timeout
+  validationTimeoutMs: 15000, // Reader.validate timeout to avoid hangs
 };
 ```
 
@@ -74,6 +79,13 @@ delayBetweenAttempts: 1000
 **Trade-offs**:
 - Lower values: More responsive, higher CPU usage
 - Higher values: More efficient, slower detection
+
+#### Payload & Validation Limits
+- **`jsonByteLimit`**: `1_000_000` (bytes) — maximum JSON body size for `/v2`.
+- **`iconByteLimit`**: `2_000_000` (bytes) — maximum SVG size for icons.
+- **`maxEntries`**: `10_000` — cap on total categories + fields.
+- **`iconFetchTimeoutMs`**: `5000` — timeout when fetching remote icons.
+- **`validationTimeoutMs`**: `15000` — maximum time allowed for `.comapeocat` validation to prevent hangs.
 
 ---
 

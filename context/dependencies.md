@@ -271,9 +271,9 @@ mapeo-settings-builder build <input> -o <output>
 ## Bun Runtime
 
 ### Bun Version
-- **Version**: `1.0.16` (pinned)
-- **Reason**: Stability and compatibility with mapeo-settings-builder
-- **Installation**: `npm install -g bun@1.0.16`
+- **Version**: `1.3.2` (pinned)
+- **Reason**: Aligns with local development and Node.js 24 base image
+- **Installation**: `npm install -g bun@1.3.2`
 
 ### Bun APIs Used
 
@@ -303,22 +303,22 @@ bun test file.test.ts       # Run specific test file
 
 ## Docker Base Image
 
-### node:18-bullseye-slim
-- **Purpose**: Base image for Docker container
-- **Reason**: Required for native dependencies (mapnik)
+### node:24-bookworm-slim
+- **Purpose**: Base image for Docker container (Node.js LTS 24)
+- **Reason**: Required for native dependencies (mapnik) while staying current with LTS
 - **Alternative**: Official Bun image doesn't support mapnik dependencies
 
 **Dependencies Installed**:
 ```dockerfile
 RUN apt-get update && apt-get install -yq \
-  gconf-service libasound2 libatk1.0-0 libc6 libcairo2 \
-  libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgcc1 \
-  libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 \
-  libnspr4 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 \
+  libasound2 libatk1.0-0 libcairo2 libcups2 libdbus-1-3 libexpat1 \
+  libfontconfig1 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 \
+  libnspr4 libnss3 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 \
   libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 \
   libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 \
   libxrender1 libxss1 libxtst6 ca-certificates \
-  fonts-liberation libnss3 lsb-release xdg-utils wget bzip2
+  fonts-liberation lsb-release xdg-utils wget bzip2 && \
+  rm -rf /var/lib/apt/lists/*
 ```
 
 **Purpose**: Support native modules used by mapeo-settings-builder

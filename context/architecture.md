@@ -193,7 +193,7 @@ Core business logic that:
 
 ## Runtime Environment
 
-- **Runtime**: Bun (pinned to v1.0.16)
+- **Runtime**: Bun (pinned to v1.3.2)
 - **Framework**: Elysia (Bun-native web framework)
 - **Language**: TypeScript with strict mode
 - **Module System**: ESNext modules

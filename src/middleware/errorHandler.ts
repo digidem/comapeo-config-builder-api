@@ -9,6 +9,7 @@ export const errorHandler = (error: any) => {
 
   // Handle both ValidationError class instances and generic errors with ValidationError name
   if (error instanceof ValidationError || error.name === 'ValidationError') {
+    (error as any).status = 400;
     return new Response(JSON.stringify({
       status: 400,
       error: 'ValidationError',
@@ -56,6 +57,7 @@ export const errorHandler = (error: any) => {
   }
 
   if (error instanceof ProcessingError) {
+    (error as any).status = 422;
     return new Response(JSON.stringify({
       status: 422,
       error: error.name,

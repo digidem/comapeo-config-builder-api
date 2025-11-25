@@ -11,4 +11,5 @@ export const config = {
   iconByteLimit: 2_000_000, // 2 MB limit for SVG icons
   maxEntries: 10_000, // Safety cap on total entries across payload
   iconFetchTimeoutMs: 5000, // Timeout for fetching remote SVGs
+  validationTimeoutMs: 15000, // Timeout for comapeocat validation to prevent hangs
 };

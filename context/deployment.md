@@ -18,22 +18,22 @@ The CoMapeo Config Builder API can be deployed in multiple ways:
 #### Build Configuration
 
 ```dockerfile
-# Base image: Node.js 18 on Debian Bullseye
-FROM node:18-bullseye-slim
+# Base image: Node.js 24 (LTS) on Debian Bookworm
+FROM node:24-bookworm-slim
 
 # Install system dependencies for mapnik
 RUN apt-get update && apt-get install -yq \
-  gconf-service libasound2 libatk1.0-0 libc6 libcairo2 \
-  libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgcc1 \
-  libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 \
-  libnspr4 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 \
+  libasound2 libatk1.0-0 libcairo2 libcups2 libdbus-1-3 libexpat1 \
+  libfontconfig1 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 \
+  libnspr4 libnss3 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 \
   libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 \
   libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 \
   libxrender1 libxss1 libxtst6 ca-certificates \
-  fonts-liberation libnss3 lsb-release xdg-utils wget bzip2
+  fonts-liberation lsb-release xdg-utils wget bzip2 && \
+  rm -rf /var/lib/apt/lists/*
 
 # Install Bun runtime (pinned version)
-RUN npm install -g bun@1.0.16
+RUN npm install -g bun@1.3.2
 
 # Install mapeo-settings-builder CLI globally
 RUN npm install -g mapeo-settings-builder
@@ -285,11 +285,11 @@ docker run -p 3000:3000 communityfirst/comapeo-config-builder-api:latest
 
 ### Prerequisites
 
-1. **Install Bun** (v1.0.16):
+1. **Install Bun** (v1.3.2):
 ```bash
 curl -fsSL https://bun.sh/install | bash
 # Or specific version
-npm install -g bun@1.0.16
+npm install -g bun@1.3.2
 ```
 
 2. **Install mapeo-settings-builder**:

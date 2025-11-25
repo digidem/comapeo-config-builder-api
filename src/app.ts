@@ -34,7 +34,14 @@ export function createApp() {
     //   const duration = Date.now() - requestStart;
     //   console.log(`[${requestId}] ${requestMethod} ${requestPath} - ${request.status} (${duration}ms)`);
     // })
-    .onError(({ error }) => errorHandler(error))
+    .onError(({ error, set }) => {
+      const response = errorHandler(error);
+      // Explicitly propagate status/headers because Elysia ignores Response status for custom errors
+      set.status = response.status;
+      // Convert headers to plain object for set.headers
+      set.headers = Object.fromEntries(response.headers.entries());
+      return response;
+    })
     // Enforce body size limit DURING parsing to prevent DoS attacks
     // This hook runs before body parsing and returns a custom parser that
     // validates size during streaming, protecting against both Content-Length

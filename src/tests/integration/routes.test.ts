@@ -6,6 +6,8 @@ import os from 'os';
 import { createApp } from '../../app';
 import * as v1Builder from '../../services/settingsBuilder';
 import * as v2Builder from '../../services/comapeocatBuilder';
+import { Reader } from 'comapeocat';
+import { config } from '../../config/app';
 
 const app = createApp();
 
@@ -67,6 +69,43 @@ describe('API routes', () => {
     // though for this test, simply verifying success and valid output is sufficient.
     const buffer = Buffer.from(await res.arrayBuffer());
     expect(buffer.byteLength).toBeGreaterThan(0); // Expect a non-empty file
+  });
+
+  it('returns 422 when comapeocat validation hangs', async () => {
+    const payload = {
+      metadata: { name: 'timeout-test', version: '1.0.0' },
+      categories: [
+        { id: 'cat-1', name: 'Cat', appliesTo: ['observation', 'track'], fields: ['field-1'], track: true },
+      ],
+      fields: [
+        { id: 'field-1', name: 'Field', tagKey: 'field-1', type: 'text' },
+      ],
+    };
+
+    const originalTimeout = config.validationTimeoutMs;
+    const validateSpy = spyOn(Reader.prototype, 'validate').mockImplementation(
+      () => new Promise(() => {}) // Never resolves
+    );
+
+    let res: Response | null = null;
+    try {
+      config.validationTimeoutMs = 50;
+
+      res = await app.handle(
+        new Request('http://localhost/v2', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      );
+    } finally {
+      config.validationTimeoutMs = originalTimeout;
+    }
+
+    const body = await res!.json();
+    expect(res?.status).toBe(422);
+    expect(body.error).toBe('ProcessingError');
+    expect(body.message).toContain('timed out');
   });
 
   it('returns 400 for /v2 with invalid Content-Type', async () => {
