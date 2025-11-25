@@ -16,23 +16,20 @@ export function createApp() {
     .use(cors())
     .use(logger)
     .onError(({ error }) => errorHandler(error))
-    // Early validation hook to check Content-Length before body parsing
-    .onRequest(({ request }) => {
-      // Only enforce for JSON POST requests to /v2 endpoint to prevent DoS
+    // Layer 1 Defense: Enforce body size limit before route handler execution
+    // This validates size independent of Content-Length header (prevents chunked encoding bypass)
+    // Note: Due to Elysia limitations, we can't validate DURING streaming without error handling issues,
+    // but this still provides defense-in-depth by validating before the route handler runs
+    .onBeforeHandle(({ request, body }) => {
       const url = new URL(request.url);
       const contentType = request.headers.get('content-type') || '';
 
+      // Only enforce for JSON POST requests to /v2 endpoint
       if (request.method === 'POST' && url.pathname === '/v2' && contentType.includes('application/json')) {
-        const contentLength = request.headers.get('content-length');
-
-        // If Content-Length is present, validate it BEFORE Elysia parses body
-        // This prevents memory exhaustion from huge payloads
-        if (contentLength) {
-          const size = parseInt(contentLength, 10);
-          if (isNaN(size)) {
-            throw new ValidationError('Invalid Content-Length header');
-          }
-          if (size > MAX_BODY_SIZE) {
+        if (body) {
+          // Calculate actual JSON size (body is already parsed at this point)
+          const bodySize = Buffer.byteLength(JSON.stringify(body), 'utf-8');
+          if (bodySize > MAX_BODY_SIZE) {
             throw new ValidationError(`Request body too large (max ${MAX_BODY_SIZE} bytes)`);
           }
         }

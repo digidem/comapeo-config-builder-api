@@ -108,6 +108,33 @@ describe('API routes', () => {
     expect(body.message).toContain('Request body too large');
   });
 
+  it('returns 400 for /v2 with oversized body WITHOUT Content-Length header', async () => {
+    // This test demonstrates the vulnerability: when Content-Length is omitted,
+    // the current implementation allows the body to be fully parsed into memory
+    // before validation runs, enabling DoS attacks via chunked encoding
+    const largePayload = { data: 'x'.repeat(2_000_000) }; // 2MB > 1MB limit
+
+    const res = await app.handle(
+      new Request('http://localhost/v2', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          // NO Content-Length header - simulates chunked transfer encoding
+        },
+        body: JSON.stringify(largePayload),
+      })
+    );
+
+    // Should still reject oversized bodies even without Content-Length
+    // Currently, Layer 2 validation catches this AFTER parsing (not ideal for DoS protection)
+    // After fix, Layer 1 should reject DURING parsing
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('ValidationError');
+    // Accept either message - Layer 1 (during parse) or Layer 2 (after parse)
+    expect(body.message).toMatch(/too large|exceeds.*bytes/i);
+  });
+
   it('prevents path traversal in /v2 endpoint', async () => {
     const payload = {
       metadata: { name: '../tmp/evil', version: '../../etc/passwd' },

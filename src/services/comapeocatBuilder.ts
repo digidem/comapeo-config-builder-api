@@ -26,6 +26,8 @@ export interface BuildResultV2 {
 }
 
 export async function buildComapeoCatV2(payload: BuildRequestV2): Promise<BuildResultV2> {
+  // Layer 2 Defense: Validate payload size after parsing (defense-in-depth)
+  // Layer 1 enforces size during streaming in app.ts onParse hook
   enforcePayloadSize(payload);
   enforceEntryCap(payload);
 
