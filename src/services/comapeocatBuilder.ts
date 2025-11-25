@@ -280,7 +280,9 @@ function normalizeTags(tags: any, categoryId: string): Record<string, unknown> {
 }
 
 function deriveCategorySelection(categories: MappedCategory[]) {
-  const observation = categories.map((c) => c.id);
+  const observation = categories
+    .filter((c) => c.definition.appliesTo.includes('observation'))
+    .map((c) => c.id);
   // Track selection should only include categories whose appliesTo includes 'track'
   // The track flag is just a hint, but appliesTo is the authoritative field
   const track = categories

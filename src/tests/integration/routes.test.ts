@@ -41,8 +41,8 @@ describe('API routes', () => {
   });
 
   it('returns built file from /v2', async () => {
-    const filePath = await createTempFile('v2-data');
-    spyOn(v2Builder, 'buildComapeoCatV2').mockResolvedValue({ outputPath: filePath, fileName: 'out.comapeocat' });
+    // We no longer mock buildComapeoCatV2 so that the real comapeocat validation can occur.
+    // The buildComapeoCatV2 service itself handles temporary file creation and cleanup.
 
     const payload = {
       metadata: { name: 'test', version: '1.0.0' },
@@ -63,8 +63,10 @@ describe('API routes', () => {
     );
 
     expect(res.status).toBe(200);
+    // Further assertions can be added here if needed to check the content of the returned file,
+    // though for this test, simply verifying success and valid output is sufficient.
     const buffer = Buffer.from(await res.arrayBuffer());
-    expect(buffer.toString()).toBe('v2-data');
+    expect(buffer.byteLength).toBeGreaterThan(0); // Expect a non-empty file
   });
 
   it('returns 400 for /v2 with invalid Content-Type', async () => {

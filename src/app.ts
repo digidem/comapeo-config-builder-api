@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { cors } from '@elysiajs/cors';
 import { handleBuildSettingsV1, handleBuildSettingsV2 } from './controllers/settingsController';
-import { logger } from './middleware/logger';
+// import { logger } from './middleware/logger'; // Removed logger import
 import { errorHandler } from './middleware/errorHandler';
 import { ValidationError } from './types/errors';
 
@@ -14,7 +14,26 @@ const MAX_BODY_SIZE = 1_000_000; // 1MB limit for v2 JSON payloads
 export function createApp() {
   const app = new Elysia()
     .use(cors())
-    .use(logger)
+    // Inlined logger middleware to avoid chaining issues
+    .onBeforeHandle(({ request, store }) => {
+      const start = Date.now();
+      const requestId = crypto.randomUUID();
+      const requestPath = new URL(request.url).pathname;
+      
+      Object.assign(store, {
+        requestId,
+        requestStart: start,
+        requestMethod: request.method,
+        requestPath,
+      });
+      
+      console.log(`[${requestId}] ${request.method} ${requestPath} - Started`);
+    })
+    // .onResponse(({ request, store }) => {
+    //   const { requestId, requestStart, requestMethod, requestPath } = store;
+    //   const duration = Date.now() - requestStart;
+    //   console.log(`[${requestId}] ${requestMethod} ${requestPath} - ${request.status} (${duration}ms)`);
+    // })
     .onError(({ error }) => errorHandler(error))
     // Enforce body size limit DURING parsing to prevent DoS attacks
     // This hook runs before body parsing and returns a custom parser that

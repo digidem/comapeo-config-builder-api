@@ -302,7 +302,7 @@ describe('deriveCategorySelection', () => {
     expect(selection.track).toEqual([]);
   });
 
-  it('includes track-only category in track selection', () => {
+  it('includes track-only category in track selection ONLY', () => {
     const categories = [
       {
         id: 'track-only',
@@ -313,7 +313,7 @@ describe('deriveCategorySelection', () => {
 
     const selection = __test__.deriveCategorySelection(categories);
 
-    expect(selection.observation).toEqual(['track-only']);
+    expect(selection.observation).toEqual([]); // Should NOT include track-only
     expect(selection.track).toEqual(['track-only']);
   });
 
