@@ -73,9 +73,8 @@ if [[ $response == "200" ]]; then
     # List the contents of the comapeocat file
     echo "Contents of the comapeocat file:"
     unzip -l "$OUTPUT_FILE"
-    
-    echo "Test completed successfully"
-    exit 0
+
+    echo "v1 test completed successfully"
   else
     echo "Invalid comapeocat file received"
     exit 1
@@ -124,6 +123,8 @@ if [[ $response_v2 == "200" ]]; then
   echo "Received comapeocat file with size: $file_size bytes"
   if unzip -t "$OUTPUT_FILE_V2" > /dev/null 2>&1; then
     echo "Valid comapeocat file received from v2"
+    echo "All tests completed successfully"
+    exit 0
   else
     echo "Invalid comapeocat file received from v2"
     exit 1

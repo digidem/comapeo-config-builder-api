@@ -107,4 +107,35 @@ describe('API routes', () => {
     expect(body.error).toBe('ValidationError');
     expect(body.message).toContain('Request body too large');
   });
+
+  it('prevents path traversal in /v2 endpoint', async () => {
+    const payload = {
+      metadata: { name: '../tmp/evil', version: '../../etc/passwd' },
+      categories: [
+        { id: 'cat-1', name: 'Cat', appliesTo: ['observation', 'track'], tags: { categoryId: 'cat-1' }, fields: ['field-1'], track: true },
+      ],
+      fields: [
+        { id: 'field-1', name: 'Field', tagKey: 'field-1', type: 'text' },
+      ],
+    };
+
+    const res = await app.handle(
+      new Request('http://localhost/v2', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    );
+
+    // Request should succeed with sanitized filenames
+    expect(res.status).toBe(200);
+
+    // Verify Content-Disposition header has sanitized filename
+    const contentDisposition = res.headers.get('Content-Disposition');
+    expect(contentDisposition).toBeTruthy();
+    expect(contentDisposition).toContain('__tmp_evil-____etc_passwd.comapeocat');
+    expect(contentDisposition).not.toContain('/');
+    expect(contentDisposition).not.toContain('\\');
+    expect(contentDisposition).not.toContain('..');
+  });
 });
