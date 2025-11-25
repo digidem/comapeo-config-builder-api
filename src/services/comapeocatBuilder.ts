@@ -299,7 +299,7 @@ function deriveCategorySelection(categories: MappedCategory[]) {
 
 async function resolveIcon(icon: any): Promise<MappedIcon> {
   if (!icon?.id) throw new ValidationError('Icon id is required');
-  
+
   const id = icon.id.endsWith('.svg') ? icon.id : `${icon.id}.svg`;
 
   if (icon.svgData) {
@@ -308,12 +308,36 @@ async function resolveIcon(icon: any): Promise<MappedIcon> {
   }
 
   if (icon.svgUrl) {
+    // Check if it's a data URI
+    if (icon.svgUrl.startsWith('data:image/svg+xml,')) {
+      const svg = decodeDataUri(icon.svgUrl);
+      enforceIconSize(svg, id);
+      return { id, svg };
+    }
+
+    // Otherwise fetch from remote URL
     const svg = await fetchIcon(icon.svgUrl);
     enforceIconSize(svg, id);
     return { id, svg };
   }
 
   throw new ValidationError(`Icon ${id} must include svgData or svgUrl`);
+}
+
+function decodeDataUri(dataUri: string): string {
+  if (!dataUri.startsWith('data:image/svg+xml,')) {
+    throw new ValidationError('Invalid data URI format. Must start with "data:image/svg+xml,"');
+  }
+
+  // Extract the data part after the prefix
+  const encodedData = dataUri.slice('data:image/svg+xml,'.length);
+
+  try {
+    // Decode the URL-encoded SVG data
+    return decodeURIComponent(encodedData);
+  } catch (error) {
+    throw new ValidationError('Failed to decode data URI. Invalid URL encoding.');
+  }
 }
 
 function enforceIconSize(svg: string, iconId: string) {
@@ -511,4 +535,5 @@ export const __test__ = {
   enforcePayloadSize,
   enforceEntryCap,
   sanitizePathComponent,
+  decodeDataUri,
 };

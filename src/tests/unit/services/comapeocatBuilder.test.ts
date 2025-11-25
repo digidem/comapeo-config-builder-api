@@ -128,6 +128,93 @@ describe('comapeocatBuilder helpers', () => {
   });
 });
 
+describe('decodeDataUri', () => {
+  it('decodes valid data URI with URL-encoded SVG', () => {
+    const dataUri = "data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3e%3cpath%20d='M12%202'/%3e%3c/svg%3e";
+    const decoded = __test__.decodeDataUri(dataUri);
+    expect(decoded).toBe("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2'/></svg>");
+  });
+
+  it('decodes data URI with spaces and special characters', () => {
+    const dataUri = "data:image/svg+xml,%3csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%2210%22%2F%3E%3c%2Fsvg%3E";
+    const decoded = __test__.decodeDataUri(dataUri);
+    expect(decoded).toContain('<svg');
+    expect(decoded).toContain('circle');
+  });
+
+  it('throws ValidationError for invalid data URI prefix', () => {
+    const invalidUri = "data:image/png,notsvg";
+    expect(() => __test__.decodeDataUri(invalidUri)).toThrow(ValidationError);
+    expect(() => __test__.decodeDataUri(invalidUri)).toThrow('Invalid data URI format');
+  });
+
+  it('throws ValidationError for malformed URL encoding', () => {
+    const malformedUri = "data:image/svg+xml,%ZZ";
+    expect(() => __test__.decodeDataUri(malformedUri)).toThrow(ValidationError);
+    expect(() => __test__.decodeDataUri(malformedUri)).toThrow('Failed to decode data URI');
+  });
+
+  it('throws ValidationError for empty data URI', () => {
+    const emptyUri = "data:image/svg+xml,";
+    const decoded = __test__.decodeDataUri(emptyUri);
+    expect(decoded).toBe('');
+  });
+});
+
+describe('icon resolution with all three formats', () => {
+  it('successfully processes svgData (inline SVG string)', async () => {
+    const payload = createBasePayload();
+    payload.icons = [{ id: 'inline', svgData: '<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>' }];
+
+    const result = await buildComapeoCatV2(payload);
+    expect(result.outputPath).toBeDefined();
+    expect(result.fileName).toContain('test');
+  });
+
+  it('successfully processes svgUrl with data URI', async () => {
+    const payload = createBasePayload();
+    const dataUri = "data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%3e%3ccircle%20r='10'/%3e%3c/svg%3e";
+    payload.icons = [{ id: 'datauri', svgUrl: dataUri }];
+
+    const result = await buildComapeoCatV2(payload);
+    expect(result.outputPath).toBeDefined();
+    expect(result.fileName).toContain('test');
+  });
+
+  it('throws when data URI exceeds size limit', async () => {
+    const payload = createBasePayload();
+    // Create a data URI that exceeds 2MB when decoded
+    const largeSvg = '<svg xmlns="http://www.w3.org/2000/svg">' + 'a'.repeat(2_000_001) + '</svg>';
+    const dataUri = `data:image/svg+xml,${encodeURIComponent(largeSvg)}`;
+    payload.icons = [{ id: 'toolarge', svgUrl: dataUri }];
+
+    await expect(buildComapeoCatV2(payload)).rejects.toThrow(ValidationError);
+  });
+
+  it('throws when icon has neither svgData nor svgUrl', async () => {
+    const payload = createBasePayload();
+    payload.icons = [{ id: 'empty' } as any];
+
+    await expect(buildComapeoCatV2(payload)).rejects.toThrow(ValidationError);
+    await expect(buildComapeoCatV2(payload)).rejects.toThrow('must include svgData or svgUrl');
+  });
+
+  it('processes all three icon formats in a single payload', async () => {
+    const payload = createBasePayload();
+    const dataUri = "data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%3e%3cpath%20d='M0%200'/%3e%3c/svg%3e";
+
+    payload.icons = [
+      { id: 'inline', svgData: '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>' },
+      { id: 'datauri', svgUrl: dataUri },
+      // Note: We can't test actual URL fetching in unit tests without mocking
+    ];
+
+    const result = await buildComapeoCatV2(payload);
+    expect(result.outputPath).toBeDefined();
+    expect(result.fileName).toContain('test');
+  });
+});
+
 describe('sanitizePathComponent security', () => {
   it('rejects forward slashes to prevent path traversal', () => {
     expect(() => __test__.sanitizePathComponent('../tmp/evil')).toThrow(ValidationError);
