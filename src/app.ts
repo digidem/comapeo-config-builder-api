@@ -39,7 +39,11 @@ export function createApp() {
       // Explicitly propagate status/headers because Elysia ignores Response status for custom errors
       set.status = response.status;
       // Convert headers to plain object for set.headers
-      set.headers = Object.fromEntries(response.headers.entries());
+      const headerMap: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        headerMap[key] = String(value);
+      });
+      set.headers = headerMap;
       return response;
     })
     // Enforce body size limit DURING parsing to prevent DoS attacks
