@@ -138,4 +138,50 @@ describe('API routes', () => {
     expect(contentDisposition).not.toContain('\\');
     expect(contentDisposition).not.toContain('..');
   });
+
+  it('returns 400 for /v2 when fields is an object instead of array', async () => {
+    const payload = {
+      metadata: { name: 'test', version: '1.0.0' },
+      categories: [
+        { id: 'cat-1', name: 'Cat', appliesTo: ['observation'], fields: ['field-1'] },
+      ],
+      fields: {}, // Invalid: object instead of array
+    };
+
+    const res = await app.handle(
+      new Request('http://localhost/v2', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('ValidationError');
+    expect(body.message).toContain('At least one field is required');
+  });
+
+  it('returns 400 for /v2 when fields is a string instead of array', async () => {
+    const payload = {
+      metadata: { name: 'test', version: '1.0.0' },
+      categories: [
+        { id: 'cat-1', name: 'Cat', appliesTo: ['observation'], fields: ['field-1'] },
+      ],
+      fields: 'invalid', // Invalid: string instead of array
+    };
+
+    const res = await app.handle(
+      new Request('http://localhost/v2', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('ValidationError');
+    expect(body.message).toContain('At least one field is required');
+  });
 });
