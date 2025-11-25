@@ -67,10 +67,12 @@ export async function buildComapeoCatV2(payload: BuildRequestV2): Promise<BuildR
   const outputPath = path.join(tmpDir, fileName);
 
   try {
-    const outputStream = normalizeToNodeStream(writer.outputStream);
-    const streamPromise = pipeline(outputStream, createWriteStream(outputPath));
+    // Finalize the Writer BEFORE streaming to ensure archive is complete
     await writer.finish();
-    await streamPromise;
+
+    // Now stream the completed archive to file
+    const outputStream = normalizeToNodeStream(writer.outputStream);
+    await pipeline(outputStream, createWriteStream(outputPath));
 
     return { outputPath, fileName };
   } catch (error) {
@@ -366,6 +368,16 @@ function enforcePayloadSize(payload: BuildRequestV2) {
 
 function enforceEntryCap(payload: BuildRequestV2) {
   const { categories = [], fields = [], icons = [], translations } = payload;
+
+  // Validate that required arrays are actually arrays before accessing .length or array methods
+  if (!Array.isArray(categories)) {
+    throw new ValidationError('At least one category is required');
+  }
+
+  if (!Array.isArray(fields)) {
+    throw new ValidationError('At least one field is required');
+  }
+
   const optionsCount = fields.reduce((sum, f) => sum + (f.options?.length || 0), 0);
   const translationEntries = translations ? countEntries(translations) : 0;
   const total = categories.length + fields.length + icons.length + optionsCount + translationEntries;
