@@ -289,9 +289,18 @@ function enforceIconSize(svg: string, iconId: string) {
 }
 
 async function fetchIcon(url: string): Promise<string> {
+  // Use Promise.race to enforce timeout on entire operation including DNS resolution
+  // AbortController alone may not cancel DNS lookups or slow connection establishment
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.iconFetchTimeoutMs);
-  try {
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      controller.abort();
+      reject(new ValidationError(`Icon fetch timeout: ${url} did not respond within ${config.iconFetchTimeoutMs}ms`));
+    }, config.iconFetchTimeoutMs);
+  });
+
+  const fetchPromise = (async () => {
     const response = await fetch(url, { signal: controller.signal });
     if (!response.ok) {
       throw new ValidationError(`Failed to fetch icon from ${url}: ${response.status}`);
@@ -323,9 +332,11 @@ async function fetchIcon(url: string): Promise<string> {
 
     const buffer = Buffer.concat(chunks);
     return buffer.toString('utf-8');
-  } finally {
-    clearTimeout(timeout);
-  }
+  })();
+
+  // Race between fetch operation and timeout
+  // This ensures DNS resolution, connection establishment, and download are all bounded
+  return Promise.race([fetchPromise, timeoutPromise]);
 }
 
 function validateTranslations(translations: Record<string, unknown>) {
