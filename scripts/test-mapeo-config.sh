@@ -153,14 +153,20 @@ cat > /tmp/comapeo-v2-payload.json <<'EOF'
       "type": "text"
     }
   ],
-  "icons": [],
-  "translations": {
-    "en": { "labels": { "category-1": "Category 1" } }
-  }
+  "icons": []
 }
 EOF
 
+# Temporarily disable set -e for curl to capture errors
+set +e
 RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" -d @/tmp/comapeo-v2-payload.json "http://localhost:$API_PORT/v2" -o response.comapeocat -w "%{http_code}")
+CURL_EXIT=$?
+set -e
+
+# Check if curl itself failed
+if [ $CURL_EXIT -ne 0 ]; then
+  error "Curl command failed with exit code: $CURL_EXIT. Container logs:\n$(docker logs "$CONTAINER_NAME" 2>&1 | tail -20)"
+fi
 
 if [ "$RESPONSE" == "200" ]; then
   info "Received comapeocat file with size: $(wc -c < response.comapeocat) bytes"
