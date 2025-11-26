@@ -123,7 +123,7 @@ async function transformPayload(payload: BuildRequestV2) {
   const categorySelection = deriveCategorySelection(categories);
 
   const translations = payload.translations
-    ? validateTranslations(payload.translations)
+    ? normalizeTranslations(payload.translations, fields)
     : undefined;
 
   return { icons, fields, categories, categorySelection, translations };
@@ -418,19 +418,112 @@ async function fetchIcon(url: string): Promise<string> {
   return Promise.race([fetchPromise, timeoutPromise]);
 }
 
-function validateTranslations(translations: Record<string, unknown>) {
+function normalizeTranslations(translations: Record<string, unknown>, fields: MappedField[]) {
+  const fieldOptionLookup = new Map<string, Array<{ label: string; value: unknown }>>();
+  for (const field of fields) {
+    fieldOptionLookup.set(field.id, field.definition.options || []);
+  }
+
   const result: Record<string, unknown> = {};
 
   for (const [lang, value] of Object.entries(translations)) {
     const normalized = validateBcp47(lang);
-    const size = Buffer.byteLength(JSON.stringify(value), 'utf-8');
+
+    if (!isPlainObject(value)) {
+      const size = Buffer.byteLength(JSON.stringify(value), 'utf-8');
+      if (size > config.jsonByteLimit) {
+        throw new ValidationError(`Translations for ${lang} exceed ${config.jsonByteLimit} bytes`);
+      }
+      result[normalized] = value;
+      continue;
+    }
+
+    const transformed = transformLocaleTranslations(value as Record<string, unknown>, fieldOptionLookup);
+    const size = Buffer.byteLength(JSON.stringify(transformed), 'utf-8');
     if (size > config.jsonByteLimit) {
       throw new ValidationError(`Translations for ${lang} exceed ${config.jsonByteLimit} bytes`);
     }
-    result[normalized] = value;
+    result[normalized] = transformed;
   }
 
   return result;
+}
+
+function transformLocaleTranslations(
+  localeTranslations: Record<string, unknown>,
+  optionLookup: Map<string, Array<{ label: string; value: unknown }>>
+) {
+  const result: Record<string, unknown> = {};
+
+  for (const [section, value] of Object.entries(localeTranslations)) {
+    if (section === 'field' && isPlainObject(value)) {
+      result[section] = transformFieldTranslations(value as Record<string, unknown>, optionLookup);
+      continue;
+    }
+
+    result[section] = value;
+  }
+
+  return result;
+}
+
+function transformFieldTranslations(
+  fieldTranslations: Record<string, unknown>,
+  optionLookup: Map<string, Array<{ label: string; value: unknown }>>
+) {
+  const result: Record<string, unknown> = {};
+
+  for (const [fieldId, value] of Object.entries(fieldTranslations)) {
+    if (isPlainObject(value)) {
+      result[fieldId] = transformFieldOptionKeys(fieldId, value as Record<string, unknown>, optionLookup);
+      continue;
+    }
+
+    result[fieldId] = value;
+  }
+
+  return result;
+}
+
+function transformFieldOptionKeys(
+  fieldId: string,
+  translations: Record<string, unknown>,
+  optionLookup: Map<string, Array<{ label: string; value: unknown }>>
+) {
+  const result: Record<string, unknown> = {};
+  const options = optionLookup.get(fieldId) || [];
+
+  for (const [key, value] of Object.entries(translations)) {
+    const match = key.match(/^options\.(\d+)$/);
+    if (match) {
+      const index = Number(match[1]);
+      if (!Number.isNaN(index) && index >= 0 && index < options.length) {
+        const option = options[index];
+        const optionValue = option?.value ?? option?.label;
+        if (optionValue !== undefined) {
+          const escapedValue = escapeOptionAttributeValue(optionValue);
+          const newKey = `options[value="${escapedValue}"]`;
+          result[newKey] = value;
+          continue;
+        }
+      }
+    }
+
+    result[key] = value;
+  }
+
+  return result;
+}
+
+function escapeOptionAttributeValue(value: unknown): string {
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\]/g, '\\]');
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function validateBcp47(lang: string): string {
@@ -558,4 +651,5 @@ export const __test__ = {
   decodeDataUri,
   normalizeIconId,
   resolveIcon,
+  normalizeTranslations,
 };

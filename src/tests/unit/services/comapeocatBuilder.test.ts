@@ -132,6 +132,45 @@ describe('comapeocatBuilder helpers', () => {
     await expect(buildComapeoCatV2(payload)).rejects.toThrow(ValidationError);
   });
 
+  it('rewrites translation option indexes to option value selectors', () => {
+    const mappedField = __test__.mapField({
+      id: 'building-type',
+      name: 'Building type',
+      tagKey: 'building-type',
+      type: 'select',
+      options: [
+        { value: 'school', label: 'School' },
+        { value: 'hospital', label: 'Hospital' },
+        { value: 'homestead', label: 'Homestead' },
+      ],
+    });
+
+    const translations = {
+      nl: {
+        field: {
+          'building-type': {
+            label: 'Gebouwtype',
+            helperText: 'School/ziekenhuis/enz.',
+            'options.0': 'School',
+            'options.1': 'Ziekenhuis',
+            'options.2': 'Boerderij',
+          },
+        },
+      },
+    };
+
+    const normalized = __test__.normalizeTranslations(translations, [mappedField]);
+    const buildingTranslations = (normalized as Record<string, any>).nl.field['building-type'];
+
+    expect(buildingTranslations).toEqual({
+      label: 'Gebouwtype',
+      helperText: 'School/ziekenhuis/enz.',
+      'options[value="school"]': 'School',
+      'options[value="hospital"]': 'Ziekenhuis',
+      'options[value="homestead"]': 'Boerderij',
+    });
+  });
+
   it('throws ValidationError when icons is an object instead of array', async () => {
     const payload = createBasePayload();
     // @ts-expect-error intentional invalid payload - icons should be array not object
