@@ -219,8 +219,8 @@ function mapCategory(category: any, index: number): MappedCategory {
   const fields = category.fields || category.defaultFieldIds || [];
   
   let icon = category.icon || category.iconId;
-  if (icon && typeof icon === 'string' && !icon.endsWith('.svg')) {
-    icon = `${icon}.svg`;
+  if (icon && typeof icon === 'string') {
+    icon = normalizeIconId(icon);
   }
 
   const definition = {
@@ -300,7 +300,7 @@ function deriveCategorySelection(categories: MappedCategory[]) {
 async function resolveIcon(icon: any): Promise<MappedIcon> {
   if (!icon?.id) throw new ValidationError('Icon id is required');
 
-  const id = icon.id.endsWith('.svg') ? icon.id : `${icon.id}.svg`;
+  const id = normalizeIconId(icon.id);
 
   if (icon.svgData) {
     enforceIconSize(icon.svgData, id);
@@ -322,6 +322,26 @@ async function resolveIcon(icon: any): Promise<MappedIcon> {
   }
 
   throw new ValidationError(`Icon ${id} must include svgData or svgUrl`);
+}
+
+const SVG_EXTENSION_PATTERN = /(\.svg)+$/i;
+
+function normalizeIconId(value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new ValidationError('Icon id must be a non-empty string');
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new ValidationError('Icon id must be a non-empty string');
+  }
+
+  const normalized = trimmed.replace(SVG_EXTENSION_PATTERN, '');
+  if (!normalized) {
+    throw new ValidationError('Icon id must include characters other than ".svg"');
+  }
+
+  return normalized;
 }
 
 function decodeDataUri(dataUri: string): string {
@@ -536,4 +556,6 @@ export const __test__ = {
   enforceEntryCap,
   sanitizePathComponent,
   decodeDataUri,
+  normalizeIconId,
+  resolveIcon,
 };

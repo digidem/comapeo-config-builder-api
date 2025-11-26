@@ -107,6 +107,18 @@ describe('comapeocatBuilder helpers', () => {
     expect(mapped.definition.appliesTo.sort()).toEqual(['observation', 'track']);
   });
 
+  it('normalizes category icon references by stripping .svg suffix', () => {
+    const category = {
+      id: 'cat',
+      name: 'Cat',
+      appliesTo: ['observation'],
+      tags: { categoryId: 'cat' },
+      icon: 'animal-terrs.svg',
+    };
+    const mapped = __test__.mapCategory(category, 0);
+    expect(mapped.definition.icon).toBe('animal-terrs');
+  });
+
   it('throws when icon exceeds size cap', async () => {
     const payload = createBasePayload();
     payload.icons = [{ id: 'big', svgData: 'a'.repeat(2_000_001) }];
@@ -169,6 +181,16 @@ describe('icon resolution with all three formats', () => {
     const result = await buildComapeoCatV2(payload);
     expect(result.outputPath).toBeDefined();
     expect(result.fileName).toContain('test');
+  });
+
+  it('normalizes icon ids to prevent duplicate .svg suffixes', async () => {
+    const icon = await __test__.resolveIcon({ id: 'animal-terrs.svg', svgData: '<svg xmlns="http://www.w3.org/2000/svg"></svg>' });
+    expect(icon.id).toBe('animal-terrs');
+  });
+
+  it('strips repeated .svg suffixes when normalizing icon ids', async () => {
+    const icon = await __test__.resolveIcon({ id: 'animal-terrs.svg.svg', svgData: '<svg xmlns="http://www.w3.org/2000/svg"></svg>' });
+    expect(icon.id).toBe('animal-terrs');
   });
 
   it('successfully processes svgUrl with data URI', async () => {
