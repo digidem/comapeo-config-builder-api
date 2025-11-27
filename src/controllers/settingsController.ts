@@ -71,76 +71,81 @@ export async function handleBuildSettingsV2(payload: BuildRequestV2) {
     throw new ValidationError('Request body is required');
   }
 
-  console.log('[COMAPEO-API] Received request for /v2 build.');
-
-  const result = await buildComapeoCatV2(payload);
-  const tmpDir = path.dirname(result.outputPath);
-
-  if (result.warnings.length > 0) {
-    for (const warning of result.warnings) {
-      console.warn(`[COMAPEO-API][WARN] ${warning}`);
-    }
-  }
-
-  console.log(`[COMAPEO-API] Generated .comapeocat file: ${result.outputPath}. Starting validation.`);
-
   try {
-    const reader = new Reader(result.outputPath);
-    const validationResult = await validateComapeocatWithTimeout(reader, result.outputPath);
-    if (Array.isArray(validationResult) && validationResult.length > 0) {
-      // Validation failed
-      const errors = validationResult.map(e => `${e.message} at ${e.filePath || 'unknown file'}`).join('\n');
-      console.error(`[COMAPEO-API] .comapeocat validation failed for ${result.outputPath}:\n${errors}`);
-      // Clean up temp directory before throwing error
-      await fs.rm(tmpDir, { recursive: true, force: true }).catch(console.error);
-      throw new ValidationError(`Generated .comapeocat file is invalid:\n${errors}`);
-    }
-    console.log(`[COMAPEO-API] .comapeocat validation successful for ${result.outputPath}.`);
-  } catch (validationError: any) { // Explicitly type validationError as 'any' for broader compatibility
-    // Handle errors during validation itself (e.g., file not found, reader issues)
-    console.error(`[COMAPEO-API] Error during .comapeocat validation for ${result.outputPath}:`, validationError);
-    // Clean up temp directory before re-throwing error
-    await fs.rm(tmpDir, { recursive: true, force: true }).catch(console.error);
-    throw new ProcessingError(`Failed to validate generated .comapeocat file: ${validationError.message}`);
-  }
+    console.log('[COMAPEO-API] Received request for /v2 build.');
 
-  // Create a streaming response that cleans up after the file is sent
-  const bunFile = Bun.file(result.outputPath);
-  const originalStream = bunFile.stream();
+    const result = await buildComapeoCatV2(payload);
+    const tmpDir = path.dirname(result.outputPath);
 
-  console.log(`[COMAPEO-API] Sending .comapeocat file: ${result.fileName}`);
-
-  // Wrap the stream to ensure cleanup happens after streaming completes
-  const reader = originalStream.getReader();
-  const cleanupStream = new ReadableStream({
-    async pull(controller) {
-      const { done, value } = await reader.read();
-      if (done) {
-        controller.close();
-        // Clean up temp directory after streaming is complete
-        fs.rm(tmpDir, { recursive: true, force: true }).catch(console.error);
-      } else {
-        controller.enqueue(value);
+    if (result.warnings.length > 0) {
+      for (const warning of result.warnings) {
+        console.warn(`[COMAPEO-API][WARN] ${warning}`);
       }
-    },
-    cancel() {
-      // Clean up if the stream is cancelled/aborted
-      fs.rm(tmpDir, { recursive: true, force: true }).catch(console.error);
     }
-  });
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/octet-stream',
-    'Content-Disposition': `attachment; filename="${path.basename(result.outputPath)}"`,
-    'Content-Length': bunFile.size.toString(),
-  };
+    console.log(`[COMAPEO-API] Generated .comapeocat file: ${result.outputPath}. Starting validation.`);
 
-  const warningsHeader = formatWarningsHeader(result.warnings);
-  if (warningsHeader) {
-    headers['X-Comapeo-Warnings'] = warningsHeader;
+    try {
+      const reader = new Reader(result.outputPath);
+      const validationResult = await validateComapeocatWithTimeout(reader, result.outputPath);
+      if (Array.isArray(validationResult) && validationResult.length > 0) {
+        // Validation failed
+        const errors = validationResult.map(e => `${e.message} at ${e.filePath || 'unknown file'}`).join('\n');
+        console.error(`[COMAPEO-API] .comapeocat validation failed for ${result.outputPath}:\n${errors}`);
+        // Clean up temp directory before throwing error
+        await fs.rm(tmpDir, { recursive: true, force: true }).catch(console.error);
+        throw new ValidationError(`Generated .comapeocat file is invalid:\n${errors}`);
+      }
+      console.log(`[COMAPEO-API] .comapeocat validation successful for ${result.outputPath}.`);
+    } catch (validationError: any) { // Explicitly type validationError as 'any' for broader compatibility
+      // Handle errors during validation itself (e.g., file not found, reader issues)
+      console.error(`[COMAPEO-API] Error during .comapeocat validation for ${result.outputPath}:`, validationError);
+      // Clean up temp directory before re-throwing error
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(console.error);
+      throw new ProcessingError(`Failed to validate generated .comapeocat file: ${validationError.message}`);
+    }
+
+    // Create a streaming response that cleans up after the file is sent
+    const bunFile = Bun.file(result.outputPath);
+    const originalStream = bunFile.stream();
+
+    console.log(`[COMAPEO-API] Sending .comapeocat file: ${result.fileName}`);
+
+    // Wrap the stream to ensure cleanup happens after streaming completes
+    const reader = originalStream.getReader();
+    const cleanupStream = new ReadableStream({
+      async pull(controller) {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          // Clean up temp directory after streaming is complete
+          fs.rm(tmpDir, { recursive: true, force: true }).catch(console.error);
+        } else {
+          controller.enqueue(value);
+        }
+      },
+      cancel() {
+        // Clean up if the stream is cancelled/aborted
+        fs.rm(tmpDir, { recursive: true, force: true }).catch(console.error);
+      }
+    });
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${path.basename(result.outputPath)}"`,
+      'Content-Length': bunFile.size.toString(),
+    };
+
+    const warningsHeader = formatWarningsHeader(result.warnings);
+    if (warningsHeader) {
+      headers['X-Comapeo-Warnings'] = warningsHeader;
+    }
+
+    return new Response(cleanupStream, { headers });
+  } catch (error) {
+    logV2PayloadForFailure(payload, error);
+    throw error;
   }
-
-  return new Response(cleanupStream, { headers });
 }
 
 async function validateComapeocatWithTimeout(reader: Reader, outputPath: string) {
@@ -176,4 +181,13 @@ function formatWarningsHeader(warnings: string[]) {
   const joined = sanitized.join(' | ');
   // Limit header size to a reasonable length to avoid header bloat
   return joined.length > 1024 ? `${joined.slice(0, 1021)}...` : joined;
+}
+
+function logV2PayloadForFailure(payload: BuildRequestV2, error: unknown) {
+  try {
+    const serializedPayload = JSON.stringify(payload, null, 2);
+    console.error('[COMAPEO-API][ERROR] /v2 build failed. Payload dump follows:', serializedPayload, error);
+  } catch (serializationError) {
+    console.error('[COMAPEO-API][ERROR] /v2 build failed and payload serialization threw an error:', serializationError, error);
+  }
 }
