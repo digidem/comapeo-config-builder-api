@@ -23,6 +23,18 @@ const BUILDER_VERSION = '1.1.0';
 export interface BuildResultV2 {
   outputPath: string;
   fileName: string;
+  warnings: string[];
+}
+
+interface NormalizedTranslationEntry {
+  originalTag: string;
+  normalizedTag?: string;
+  payload: Record<string, unknown>;
+}
+
+interface NormalizedTranslationsResult {
+  entries: NormalizedTranslationEntry[];
+  warnings: string[];
 }
 
 export async function buildComapeoCatV2(payload: BuildRequestV2): Promise<BuildResultV2> {
@@ -32,6 +44,7 @@ export async function buildComapeoCatV2(payload: BuildRequestV2): Promise<BuildR
   enforceEntryCap(payload);
 
   const mapped = await transformPayload(payload);
+  const warnings: string[] = [...mapped.warnings];
 
   const writer = new Writer();
 
@@ -63,10 +76,10 @@ export async function buildComapeoCatV2(payload: BuildRequestV2): Promise<BuildR
     writer.addCategory(category.id, definition);
   }
 
-  if (mapped.translations) {
-    for (const [lang, translations] of Object.entries(mapped.translations)) {
-      // Cast to satisfy Writer's type requirement - validateTranslations ensures correct structure
-      writer.addTranslations(lang, translations as Record<string, Record<string, string>>);
+  if (mapped.translations.length > 0) {
+    const translationWarnings = await addTranslationsWithFallback(writer, mapped.translations);
+    if (translationWarnings.length > 0) {
+      warnings.push(...translationWarnings);
     }
   }
 
@@ -88,7 +101,7 @@ export async function buildComapeoCatV2(payload: BuildRequestV2): Promise<BuildR
     const outputStream = normalizeToNodeStream(writer.outputStream);
     await pipeline(outputStream, createWriteStream(outputPath));
 
-    return { outputPath, fileName };
+    return { outputPath, fileName, warnings };
   } catch (error) {
     // Clean up temp directory on failure
     await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
@@ -122,11 +135,18 @@ async function transformPayload(payload: BuildRequestV2) {
 
   const categorySelection = deriveCategorySelection(categories);
 
-  const translations = payload.translations
+  const translationResult = payload.translations
     ? normalizeTranslations(payload.translations, fields)
-    : undefined;
+    : { entries: [], warnings: [] };
 
-  return { icons, fields, categories, categorySelection, translations };
+  return {
+    icons,
+    fields,
+    categories,
+    categorySelection,
+    translations: translationResult.entries,
+    warnings: translationResult.warnings,
+  };
 }
 
 function mapField(field: FieldInput): MappedField {
@@ -418,23 +438,27 @@ async function fetchIcon(url: string): Promise<string> {
   return Promise.race([fetchPromise, timeoutPromise]);
 }
 
-function normalizeTranslations(translations: Record<string, unknown>, fields: MappedField[]) {
+function normalizeTranslations(
+  translations: Record<string, unknown>,
+  fields: MappedField[]
+): NormalizedTranslationsResult {
   const fieldOptionLookup = new Map<string, Array<{ label: string; value: unknown }>>();
   for (const field of fields) {
     fieldOptionLookup.set(field.id, field.definition.options || []);
   }
 
-  const result: Record<string, unknown> = {};
+  const entries: NormalizedTranslationEntry[] = [];
+  const warnings: string[] = [];
 
   for (const [lang, value] of Object.entries(translations)) {
-    const normalized = validateBcp47(lang);
+    const normalized = tryNormalizeLocale(lang);
 
     if (!isPlainObject(value)) {
       const size = Buffer.byteLength(JSON.stringify(value), 'utf-8');
       if (size > config.jsonByteLimit) {
         throw new ValidationError(`Translations for ${lang} exceed ${config.jsonByteLimit} bytes`);
       }
-      result[normalized] = value;
+      entries.push({ originalTag: lang, normalizedTag: normalized, payload: value as Record<string, unknown> });
       continue;
     }
 
@@ -443,10 +467,228 @@ function normalizeTranslations(translations: Record<string, unknown>, fields: Ma
     if (size > config.jsonByteLimit) {
       throw new ValidationError(`Translations for ${lang} exceed ${config.jsonByteLimit} bytes`);
     }
-    result[normalized] = transformed;
+    entries.push({
+      originalTag: lang,
+      normalizedTag: normalized,
+      payload: transformed,
+    });
   }
 
-  return result;
+  return { entries, warnings };
+}
+
+function tryNormalizeLocale(tag: string) {
+  return safeValidateLocale(tag) ?? safeValidateLocale(tag.replace(/_/g, '-'));
+}
+
+interface LocaleCandidate {
+  value: string;
+  reason?: string;
+}
+
+async function addTranslationsWithFallback(
+  writer: Writer,
+  entries: NormalizedTranslationEntry[]
+) {
+  const warnings: string[] = [];
+
+  for (const entry of entries) {
+    const candidates = buildLocaleCandidates(entry);
+    let added = false;
+    let lastLocaleError: Error | undefined;
+
+    for (const candidate of candidates) {
+      try {
+        await writer.addTranslations(candidate.value, entry.payload as Record<string, Record<string, string>>);
+        if (candidate.reason) {
+          warnings.push(
+            `Translations for "${entry.originalTag}" were stored as "${candidate.value}" (${candidate.reason}).`
+          );
+        } else if (candidate.value !== entry.normalizedTag) {
+          warnings.push(
+            `Translations for "${entry.originalTag}" were stored as "${candidate.value}" (auto-normalized).`
+          );
+        }
+        added = true;
+        break;
+      } catch (error) {
+        if (isLocaleValidationError(error)) {
+          lastLocaleError = error as Error;
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (!added) {
+      warnings.push(
+        `Skipped translations for "${entry.originalTag}": ${lastLocaleError?.message ?? 'Locale validation failed'}`
+      );
+    }
+  }
+
+  return warnings;
+}
+
+function buildLocaleCandidates(entry: NormalizedTranslationEntry): LocaleCandidate[] {
+  const seen = new Set<string>();
+  const candidates: LocaleCandidate[] = [];
+
+  const addCandidate = (value: string | undefined, reason?: string) => {
+    if (!value) return;
+    if (seen.has(value)) return;
+    seen.add(value);
+    candidates.push({ value, reason });
+  };
+
+  if (entry.normalizedTag) {
+    const reason = entry.normalizedTag !== entry.originalTag ? 'auto-normalized locale tag' : undefined;
+    addCandidate(entry.normalizedTag, reason);
+  }
+
+  const sanitized = sanitizeLocaleFormat(entry.originalTag);
+  if (sanitized) {
+    addCandidate(sanitized.value, sanitized.reason);
+  }
+
+  const aliasFromOriginal = getAliasLocale(entry.originalTag);
+  if (aliasFromOriginal) {
+    addCandidate(aliasFromOriginal, `alias mapped from "${entry.originalTag}"`);
+  }
+
+  const aliasFromNormalized = getAliasLocale(entry.normalizedTag);
+  if (aliasFromNormalized) {
+    addCandidate(aliasFromNormalized, `alias mapped from "${entry.normalizedTag}"`);
+  }
+
+  const likelyLocale = deriveLikelyLocale(entry);
+  if (likelyLocale) {
+    addCandidate(likelyLocale.value, likelyLocale.reason);
+  }
+
+  const regionFallback = deriveRegionFallback(entry);
+  if (regionFallback) {
+    addCandidate(regionFallback.value, regionFallback.reason);
+  }
+
+  return candidates;
+}
+
+function getAliasLocale(tag: string | undefined) {
+  if (!tag) return undefined;
+  const alias = config.localeAliases?.[tag.toLowerCase()];
+  if (!alias) return undefined;
+  return safeValidateLocale(alias);
+}
+
+function sanitizeLocaleFormat(tag: string): LocaleCandidate | undefined {
+  if (!tag || !tag.includes('_')) return undefined;
+  const replaced = tag.replace(/_/g, '-');
+  if (replaced === tag) return undefined;
+  const validated = safeValidateLocale(replaced);
+  if (!validated) return undefined;
+  return {
+    value: validated,
+    reason: 'replaced underscores with hyphens to form a valid locale',
+  };
+}
+
+function deriveLikelyLocale(entry: NormalizedTranslationEntry): LocaleCandidate | undefined {
+  const region = extractRegionSubtag(entry.originalTag);
+  if (!region) return undefined;
+
+  try {
+    // Use Intl.Locale maximize to infer the most likely language/script for the region
+    const locale = new Intl.Locale('und', { region });
+    const maximized = locale.maximize();
+    const candidate = maximized?.toString();
+    const validated = safeValidateLocale(candidate);
+    if (validated) {
+      return {
+        value: validated,
+        reason: `derived likely locale using Intl.Locale for region ${region}`,
+      };
+    }
+  } catch {
+    // Ignore environments without Intl.Locale support or invalid inputs
+  }
+
+  return undefined;
+}
+
+function deriveRegionFallback(entry: NormalizedTranslationEntry): LocaleCandidate | undefined {
+  const regionSource =
+    (entry.normalizedTag && !entry.normalizedTag.includes('-') && entry.normalizedTag) ||
+    extractRegionSubtag(entry.originalTag);
+
+  if (!regionSource) {
+    return undefined;
+  }
+
+  if (/^[A-Za-z]{2}$/.test(regionSource)) {
+    const fallback = `und-${regionSource.toUpperCase()}`;
+    const validated = safeValidateLocale(fallback);
+    if (validated) {
+      return {
+        value: validated,
+        reason: `added neutral language for region tag derived from "${entry.originalTag}"`,
+      };
+    }
+  }
+
+  if (/^\d{3}$/.test(regionSource)) {
+    const fallback = `und-${regionSource}`;
+    const validated = safeValidateLocale(fallback);
+    if (validated) {
+      return {
+        value: validated,
+        reason: `added neutral language for numeric region tag derived from "${entry.originalTag}"`,
+      };
+    }
+  }
+
+  return undefined;
+}
+
+function extractRegionSubtag(tag: string) {
+  if (!tag) return undefined;
+  const trimmed = tag.trim();
+  if (/^[A-Za-z]{2}$/.test(trimmed)) {
+    return trimmed.toUpperCase();
+  }
+
+  const normalized = trimmed.replace(/_/g, '-');
+  const parts = normalized.split('-');
+  for (let i = parts.length - 1; i >= 0; i -= 1) {
+    const part = parts[i];
+    if (/^[A-Za-z]{2}$/.test(part)) {
+      return part.toUpperCase();
+    }
+    if (/^\d{3}$/.test(part)) {
+      return part;
+    }
+  }
+
+  return undefined;
+}
+
+function safeValidateLocale(tag: string) {
+  try {
+    return validateBcp47(tag);
+  } catch {
+    return undefined;
+  }
+}
+
+function isLocaleValidationError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const message = (error as { message?: string }).message;
+  if (!message) return false;
+  return (
+    message.includes('Invalid primary language subtag') ||
+    message.includes('Invalid region subtag') ||
+    message.includes('Invalid BCP 47 tag')
+  );
 }
 
 function transformLocaleTranslations(

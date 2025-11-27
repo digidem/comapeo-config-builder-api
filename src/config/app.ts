@@ -12,4 +12,7 @@ export const config = {
   maxEntries: 10_000, // Safety cap on total entries across payload
   iconFetchTimeoutMs: 5000, // Timeout for fetching remote SVGs
   validationTimeoutMs: 15000, // Timeout for comapeocat validation to prevent hangs
+  localeAliases: {
+    ke: 'und-KE', // Kenya-only tags lack a language subtag; treat them as region-specific but language-agnostic
+  } as Record<string, string>,
 };

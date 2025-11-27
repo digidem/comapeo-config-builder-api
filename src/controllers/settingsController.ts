@@ -76,6 +76,12 @@ export async function handleBuildSettingsV2(payload: BuildRequestV2) {
   const result = await buildComapeoCatV2(payload);
   const tmpDir = path.dirname(result.outputPath);
 
+  if (result.warnings.length > 0) {
+    for (const warning of result.warnings) {
+      console.warn(`[COMAPEO-API][WARN] ${warning}`);
+    }
+  }
+
   console.log(`[COMAPEO-API] Generated .comapeocat file: ${result.outputPath}. Starting validation.`);
 
   try {
@@ -123,13 +129,18 @@ export async function handleBuildSettingsV2(payload: BuildRequestV2) {
     }
   });
 
-  return new Response(cleanupStream, {
-    headers: {
-      'Content-Type': 'application/octet-stream',
-      'Content-Disposition': `attachment; filename="${path.basename(result.outputPath)}"`,
-      'Content-Length': bunFile.size.toString(),
-    },
-  });
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/octet-stream',
+    'Content-Disposition': `attachment; filename="${path.basename(result.outputPath)}"`,
+    'Content-Length': bunFile.size.toString(),
+  };
+
+  const warningsHeader = formatWarningsHeader(result.warnings);
+  if (warningsHeader) {
+    headers['X-Comapeo-Warnings'] = warningsHeader;
+  }
+
+  return new Response(cleanupStream, { headers });
 }
 
 async function validateComapeocatWithTimeout(reader: Reader, outputPath: string) {
@@ -147,4 +158,22 @@ async function validateComapeocatWithTimeout(reader: Reader, outputPath: string)
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
+}
+
+function formatWarningsHeader(warnings: string[]) {
+  if (!warnings || warnings.length === 0) {
+    return undefined;
+  }
+
+  const sanitized = warnings
+    .map((warning) => warning.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+
+  if (sanitized.length === 0) {
+    return undefined;
+  }
+
+  const joined = sanitized.join(' | ');
+  // Limit header size to a reasonable length to avoid header bloat
+  return joined.length > 1024 ? `${joined.slice(0, 1021)}...` : joined;
 }

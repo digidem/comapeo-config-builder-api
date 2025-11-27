@@ -125,11 +125,34 @@ describe('comapeocatBuilder helpers', () => {
     await expect(buildComapeoCatV2(payload)).rejects.toThrow(ValidationError);
   });
 
-  it('throws when translations use invalid locale', async () => {
+  it('normalizes translations that use underscores in locales', async () => {
     const payload = createBasePayload();
-    // Underscore is invalid in BCP-47 (should be hyphen)
-    payload.translations = { 'en_US': { label: 'bad' } };
-    await expect(buildComapeoCatV2(payload)).rejects.toThrow(ValidationError);
+    payload.translations = { 'en_US': { field: { 'field-1': { label: 'USA' } } } } as any;
+    const result = await buildComapeoCatV2(payload);
+    expect(result.warnings.some((warning) => warning.includes('en_US') && warning.includes('en-US'))).toBe(true);
+  });
+
+  it('skips translations when locale cannot be resolved', async () => {
+    const payload = createBasePayload();
+    payload.translations = { '???': { field: { 'field-1': { label: 'Unknown' } } } } as any;
+    const result = await buildComapeoCatV2(payload);
+    expect(result.warnings.some((warning) => warning.includes('Skipped translations for "???"'))).toBe(true);
+  });
+
+  it('warns and falls back when translations only include a region subtag', async () => {
+    const payload = createBasePayload();
+    payload.translations = {
+      ke: {
+        field: {
+          'field-1': {
+            label: 'Miti',
+          },
+        },
+      },
+    };
+
+    const result = await buildComapeoCatV2(payload);
+    expect(result.warnings.some((warning) => warning.includes('ke'))).toBe(true);
   });
 
   it('rewrites translation option indexes to option value selectors', () => {
@@ -160,7 +183,9 @@ describe('comapeocatBuilder helpers', () => {
     };
 
     const normalized = __test__.normalizeTranslations(translations, [mappedField]);
-    const buildingTranslations = (normalized as Record<string, any>).nl.field['building-type'];
+    const nlEntry = normalized.entries.find((entry) => entry.normalizedTag === 'nl');
+    expect(nlEntry).toBeDefined();
+    const buildingTranslations = (nlEntry!.payload as Record<string, any>).field['building-type'];
 
     expect(buildingTranslations).toEqual({
       label: 'Gebouwtype',
