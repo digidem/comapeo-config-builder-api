@@ -10,6 +10,7 @@ import { config } from '../config/app';
 import { ProcessingError, ValidationError } from '../types/errors';
 import type {
   BuildRequestV2,
+  CategoryInput,
   ComapeoFieldType,
   FieldInput,
   MappedCategory,
@@ -42,6 +43,12 @@ export async function buildComapeoCatV2(payload: BuildRequestV2): Promise<BuildR
   // Layer 1 enforces size during streaming in app.ts onParse hook
   enforcePayloadSize(payload);
   enforceEntryCap(payload);
+  enforceUniqueIds(payload.fields, 'field');
+  enforceUniqueIds(payload.categories, 'category');
+  if (Array.isArray(payload.icons) && payload.icons.length > 0) {
+    enforceUniqueIds(payload.icons, 'icon');
+  }
+  validateCategoryFieldReferences(payload.categories, payload.fields);
 
   const mapped = await transformPayload(payload);
   const warnings: string[] = [...mapped.warnings];
@@ -845,6 +852,63 @@ function normalizeToNodeStream(streamLike: any) {
   throw new ProcessingError('Writer outputStream is not readable');
 }
 
+function enforceUniqueIds<T extends { id?: string }>(items: T[], entityName: string) {
+  const seen = new Set<string>();
+
+  for (const item of items) {
+    const rawId = typeof item?.id === 'string' ? item.id.trim() : '';
+    if (!rawId) {
+      throw new ValidationError(`${entityName} id must be a non-empty string`);
+    }
+
+    if (seen.has(rawId)) {
+      throw new ValidationError(`Duplicate ${entityName} id detected: ${rawId}`);
+    }
+
+    seen.add(rawId);
+  }
+}
+
+function validateCategoryFieldReferences(categories: CategoryInput[], fields: FieldInput[]) {
+  const fieldIds = new Set(fields.map((field) => field.id).filter((id): id is string => Boolean(id)));
+  const issues: string[] = [];
+
+  for (const category of categories) {
+    const refs = new Set<string>();
+
+    if (Array.isArray(category.fields)) {
+      for (const ref of category.fields) {
+        if (typeof ref === 'string' && ref.trim()) {
+          refs.add(ref.trim());
+        }
+      }
+    }
+
+    if (Array.isArray(category.defaultFieldIds)) {
+      for (const ref of category.defaultFieldIds) {
+        if (typeof ref === 'string' && ref.trim()) {
+          refs.add(ref.trim());
+        }
+      }
+    }
+
+    if (refs.size === 0) {
+      continue;
+    }
+
+    const missing = Array.from(refs).filter((ref) => !fieldIds.has(ref));
+    if (missing.length > 0) {
+      issues.push(`${category.id}: ${missing.join(', ')}`);
+    }
+  }
+
+  if (issues.length > 0) {
+    throw new ValidationError(
+      `Categories reference unknown field ids. Missing references -> ${issues.join(' | ')}`
+    );
+  }
+}
+
 /**
  * Sanitizes a string to be safe for use as a path component.
  * Rejects inputs containing path separators or traversal patterns to prevent attacks.
@@ -889,6 +953,8 @@ export const __test__ = {
   normalizeTags,
   enforcePayloadSize,
   enforceEntryCap,
+  enforceUniqueIds,
+  validateCategoryFieldReferences,
   sanitizePathComponent,
   decodeDataUri,
   normalizeIconId,

@@ -20,6 +20,30 @@ describe('comapeocatBuilder helpers', () => {
     expect(() => __test__.mapFieldType(badField.type as any)).toThrow(ValidationError);
   });
 
+  it('throws when duplicate field ids are provided', async () => {
+    const payload = createBasePayload();
+    payload.fields.push({ ...payload.fields[0] });
+
+    await expect(buildComapeoCatV2(payload)).rejects.toThrow('Duplicate field id');
+  });
+
+  it('throws when duplicate category ids are provided', async () => {
+    const payload = createBasePayload();
+    payload.categories.push({ ...payload.categories[0] });
+
+    await expect(buildComapeoCatV2(payload)).rejects.toThrow('Duplicate category id');
+  });
+
+  it('throws when duplicate icon ids are provided', async () => {
+    const payload = createBasePayload();
+    payload.icons = [
+      { id: 'icon-1', svgData: '<svg />' },
+      { id: 'icon-1', svgData: '<svg />' },
+    ];
+
+    await expect(buildComapeoCatV2(payload)).rejects.toThrow('Duplicate icon id');
+  });
+
   it('fails when appliesTo is missing', () => {
     expect(() => __test__.mapCategory({ id: 'cat', name: 'Cat' }, 0)).toThrow(ValidationError);
   });
@@ -70,6 +94,13 @@ describe('comapeocatBuilder helpers', () => {
     const category = { id: 'cat', name: 'Cat', appliesTo: ['foo'] };
     expect(() => __test__.mapCategory(category, 0)).toThrow(ValidationError);
     expect(() => __test__.mapCategory(category, 0)).toThrow('appliesTo must only contain "observation" or "track"');
+  });
+
+  it('throws when a category references unknown field ids', async () => {
+    const payload = createBasePayload();
+    payload.categories[0].fields = ['missing-field'];
+
+    await expect(buildComapeoCatV2(payload)).rejects.toThrow('unknown field ids');
   });
 
   it('throws when appliesTo contains mix of valid and invalid values', () => {
