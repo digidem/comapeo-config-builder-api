@@ -751,7 +751,7 @@ function transformFieldOptionKeys(
         const optionValue = option?.value ?? option?.label;
         if (optionValue !== undefined) {
           const escapedValue = escapeOptionAttributeValue(optionValue);
-          const newKey = `options[value="${escapedValue}"]`;
+          const newKey = `options[value="${escapedValue}"].label`;
           result[newKey] = value;
           continue;
         }

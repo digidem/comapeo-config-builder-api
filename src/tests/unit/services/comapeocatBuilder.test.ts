@@ -221,9 +221,9 @@ describe('comapeocatBuilder helpers', () => {
     expect(buildingTranslations).toEqual({
       label: 'Gebouwtype',
       helperText: 'School/ziekenhuis/enz.',
-      'options[value="school"]': 'School',
-      'options[value="hospital"]': 'Ziekenhuis',
-      'options[value="homestead"]': 'Boerderij',
+      'options[value="school"].label': 'School',
+      'options[value="hospital"].label': 'Ziekenhuis',
+      'options[value="homestead"].label': 'Boerderij',
     });
   });
 
