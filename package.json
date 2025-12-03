@@ -11,6 +11,7 @@
     "dev": "bun --watch src/index.ts",
     "build": "bun build src/index.ts --outdir ./dist --target node",
     "lint": "biome lint .",
+    "typecheck": "bun x tsc --noEmit",
     "test": "BUN_ENV=test bun test src/tests",
     "test:unit": "BUN_ENV=test bun test src/tests/unit",
     "test:integration": "BUN_ENV=test bun test src/tests/integration",

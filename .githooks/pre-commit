@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+printf '\n[pre-commit] bun run lint\n'
+bun run lint
+
+printf '\n[pre-commit] bun run typecheck\n'
+bun run typecheck

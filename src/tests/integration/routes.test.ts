@@ -38,7 +38,7 @@ describe('API routes', () => {
     );
 
     expect(res.status).toBe(200);
-    const buffer = Buffer.from(await res.arrayBuffer());
+    const buffer = new Uint8Array(await res.arrayBuffer());
     expect(buffer.toString()).toBe('v1-data');
   });
 
@@ -67,7 +67,7 @@ describe('API routes', () => {
     expect(res.status).toBe(200);
     // Further assertions can be added here if needed to check the content of the returned file,
     // though for this test, simply verifying success and valid output is sufficient.
-    const buffer = Buffer.from(await res.arrayBuffer());
+    const buffer = new Uint8Array(await res.arrayBuffer());
     expect(buffer.byteLength).toBeGreaterThan(0); // Expect a non-empty file
   });
 
@@ -95,7 +95,7 @@ describe('API routes', () => {
     );
 
     expect(res.status).toBe(200);
-    const buffer = Buffer.from(await res.arrayBuffer());
+    const buffer = new Uint8Array(await res.arrayBuffer());
 
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'comapeo-legacy-'));
     const filePath = path.join(tmpDir, 'out.comapeocat');
