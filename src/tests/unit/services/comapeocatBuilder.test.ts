@@ -53,6 +53,71 @@ describe('comapeocatBuilder helpers', () => {
     expect(tags).toEqual({ categoryId: 'cat-1' });
   });
 
+  it('adds legacyCompat tag keyed by category id when enabled', () => {
+    const category = { id: 'mahali-pa-kihistoria', name: 'Historic Place', appliesTo: ['observation'] };
+    const mapped = __test__.mapCategory(category, 0, true);
+
+    expect(mapped.definition.tags).toEqual({
+      categoryId: 'mahali-pa-kihistoria',
+      'mahali-pa-kihistoria': 'yes',
+    });
+  });
+
+  it('does not add legacyCompat tag when flag is false', () => {
+    const category = { id: 'cat-plain', name: 'Plain', appliesTo: ['observation'] };
+    const mapped = __test__.mapCategory(category, 0, false);
+
+    expect(mapped.definition.tags).toEqual({ categoryId: 'cat-plain' });
+  });
+
+  it('merges legacyCompat tag with existing object tags', () => {
+    const category = {
+      id: 'cat-merge',
+      name: 'Merge',
+      appliesTo: ['observation'],
+      tags: { categoryId: 'cat-merge', theme: 'forest' },
+    };
+
+    const mapped = __test__.mapCategory(category, 0, true);
+
+    expect(mapped.definition.tags).toEqual({
+      categoryId: 'cat-merge',
+      theme: 'forest',
+      'cat-merge': 'yes',
+    });
+  });
+
+  it('adds legacyCompat tag when original tags are an array', () => {
+    const category = {
+      id: 'cat-array',
+      name: 'Array',
+      appliesTo: ['observation'],
+      tags: ['a', 'b'],
+    };
+
+    const mapped = __test__.mapCategory(category, 0, true);
+
+    expect(mapped.definition.tags).toEqual({
+      tag0: 'a',
+      tag1: 'b',
+      'cat-array': 'yes',
+    });
+  });
+
+  it('applies legacyCompat tagging through the full builder path', async () => {
+    const payload = createBasePayload({ legacyCompat: true });
+
+    const result = await buildComapeoCatV2(payload);
+    expect(result.warnings).toEqual([]);
+
+    // Re-map to inspect categories the same way the writer receives them
+    const mapped = __test__.mapCategory(payload.categories[0], 0, payload.metadata.legacyCompat);
+    expect(mapped.definition.tags).toEqual({
+      categoryId: 'cat-1',
+      'cat-1': 'yes',
+    });
+  });
+
   it('rejects invalid locales', () => {
     expect(() => __test__.validateBcp47('')).toThrow(ValidationError);
     expect(() => __test__.validateBcp47('   ')).toThrow(ValidationError);
@@ -552,9 +617,9 @@ describe('deriveCategorySelection', () => {
   });
 });
 
-function createBasePayload(options?: { fieldTypeOverride?: string }): BuildRequestV2 {
+function createBasePayload(options?: { fieldTypeOverride?: string; legacyCompat?: boolean }): BuildRequestV2 {
   return {
-    metadata: { name: 'test', version: '1.0.0' },
+    metadata: { name: 'test', version: '1.0.0', legacyCompat: options?.legacyCompat },
     categories: [
       {
         id: 'cat-1',

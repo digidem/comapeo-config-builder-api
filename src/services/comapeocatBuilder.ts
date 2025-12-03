@@ -137,7 +137,7 @@ async function transformPayload(payload: BuildRequestV2) {
   const icons = await Promise.all((payload.icons || []).map(resolveIcon));
   const fields = payload.fields.map(mapField);
   const categories = payload.categories.map((category, index) =>
-    mapCategory(category, index)
+    mapCategory(category, index, payload.metadata?.legacyCompat)
   );
 
   const categorySelection = deriveCategorySelection(categories);
@@ -237,12 +237,18 @@ function mapFieldType(type: FieldInput['type']): ComapeoFieldType {
   }
 }
 
-function mapCategory(category: any, index: number): MappedCategory {
+function mapCategory(category: any, index: number, legacyCompat?: boolean): MappedCategory {
   if (!category?.id) throw new ValidationError(`Category at index ${index} is missing id`);
   if (!category?.name) throw new ValidationError(`Category ${category.id} is missing name`);
 
   const appliesTo = buildAppliesTo(category);
-  const tags = normalizeTags(category.tags, category.id);
+  // Clone to avoid mutating the original payload when adding legacy compat tags
+  const tags = { ...normalizeTags(category.tags, category.id) } as Record<string, unknown>;
+
+  if (legacyCompat) {
+    // Back-compat flag: add a tag keyed by category id for legacy clients
+    tags[category.id] = 'yes';
+  }
   const fields = category.fields || category.defaultFieldIds || [];
   
   let icon = category.icon || category.iconId;

@@ -20,6 +20,7 @@ export interface BuildRequestV2 {
     description?: string;
     builderName?: string;
     builderVersion?: string;
+    legacyCompat?: boolean;
   };
   categories: CategoryInput[];
   fields: FieldInput[];
