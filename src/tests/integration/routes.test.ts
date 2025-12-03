@@ -130,7 +130,7 @@ describe('API routes', () => {
   });
 
   it('returns 400 for /v2 with oversized body', async () => {
-    const largePayload = { data: 'x'.repeat(2_000_000) }; // 2MB > 1MB limit
+    const largePayload = { data: 'x'.repeat(11_000_000) }; // 11MB > 10MB limit
 
     const res = await app.handle(
       new Request('http://localhost/v2', {
@@ -153,7 +153,7 @@ describe('API routes', () => {
     // This test demonstrates the vulnerability: when Content-Length is omitted,
     // the current implementation allows the body to be fully parsed into memory
     // before validation runs, enabling DoS attacks via chunked encoding
-    const largePayload = { data: 'x'.repeat(2_000_000) }; // 2MB > 1MB limit
+    const largePayload = { data: 'x'.repeat(11_000_000) }; // 11MB > 10MB limit
 
     const res = await app.handle(
       new Request('http://localhost/v2', {
@@ -179,7 +179,7 @@ describe('API routes', () => {
   it('enforces size limit with content-type including charset parameter', async () => {
     // This test exposes the security vulnerability: content-type with charset
     // bypasses the streaming validation, allowing large payloads to be buffered
-    const largePayload = { data: 'x'.repeat(2_000_000) }; // 2MB > 1MB limit
+    const largePayload = { data: 'x'.repeat(11_000_000) }; // 11MB > 10MB limit
 
     const res = await app.handle(
       new Request('http://localhost/v2', {

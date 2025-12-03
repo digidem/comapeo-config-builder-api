@@ -12,7 +12,9 @@ export const config = {
   tempDirPrefix: 'comapeo-settings-',
   maxAttempts: 120,
   delayBetweenAttempts: 1000,
-  jsonByteLimit: 1_000_000, // 1 MB JSON payload cap (v2)
+  jsonByteLimit: process.env.MAX_JSON_BODY_SIZE
+    ? parseInt(process.env.MAX_JSON_BODY_SIZE)
+    : 10_000_000, // 10 MB JSON payload cap (v2, configurable via MAX_JSON_BODY_SIZE env var)
   iconByteLimit: 2_000_000, // 2 MB SVG cap
   maxEntries: 10_000, // Max categories + fields
   iconFetchTimeoutMs: 5000, // Remote icon fetch timeout
@@ -81,7 +83,7 @@ delayBetweenAttempts: 1000
 - Higher values: More efficient, slower detection
 
 #### Payload & Validation Limits
-- **`jsonByteLimit`**: `1_000_000` (bytes) — maximum JSON body size for `/v2`.
+- **`jsonByteLimit`**: `10_000_000` (bytes) — maximum JSON body size for `/v2` (10 MB default, configurable via `MAX_JSON_BODY_SIZE` environment variable).
 - **`iconByteLimit`**: `2_000_000` (bytes) — maximum SVG size for icons.
 - **`maxEntries`**: `10_000` — cap on total categories + fields.
 - **`iconFetchTimeoutMs`**: `5000` — timeout when fetching remote icons.
@@ -109,6 +111,24 @@ PORT=8080 bun run start
 
 # Docker
 docker run -e PORT=8080 -p 8080:8080 comapeo-config-builder-api
+```
+
+#### `MAX_JSON_BODY_SIZE`
+- **Required**: No
+- **Default**: `10000000` (10 MB)
+- **Format**: Integer (bytes)
+- **Description**: Maximum JSON body size for v2 endpoint
+
+**Examples**:
+```bash
+# Set to 5MB
+MAX_JSON_BODY_SIZE=5000000 bun run start
+
+# Set to 20MB for large configs
+MAX_JSON_BODY_SIZE=20000000 bun run start
+
+# Docker with custom size
+docker run -e MAX_JSON_BODY_SIZE=15000000 -p 3000:3000 comapeo-config-builder-api
 ```
 
 #### `BUN_ENV`

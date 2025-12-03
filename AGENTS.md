@@ -183,10 +183,11 @@ Comprehensive documentation is organized into the following files:
   tempDirPrefix: 'comapeo-settings-',
   maxAttempts: 120,              // Polling attempts (v1)
   delayBetweenAttempts: 1000,    // Polling delay (ms)
-  maxBodySize: 1_000_000,        // 1MB JSON limit (v2)
-  maxIconSize: 2_000_000,        // 2MB icon limit (v2)
-  maxTotalEntries: 10_000,       // Max categories + fields
-  iconFetchTimeout: 5_000        // Icon fetch timeout (ms)
+  jsonByteLimit: 10_000_000,     // 10MB JSON limit (v2, configurable via MAX_JSON_BODY_SIZE env var)
+  iconByteLimit: 2_000_000,      // 2MB icon limit (v2)
+  maxEntries: 10_000,            // Max categories + fields
+  iconFetchTimeoutMs: 5_000,     // Icon fetch timeout (ms)
+  validationTimeoutMs: 15_000    // Validation timeout (ms)
 }
 ```
 
@@ -256,7 +257,7 @@ Comprehensive documentation is organized into the following files:
 The v2 endpoint enforces strict validation to ensure data quality:
 
 1. **Size Limits**:
-   - JSON body: ≤1MB (validated during parsing to prevent DoS)
+   - JSON body: ≤10MB (validated during parsing to prevent DoS, configurable via `MAX_JSON_BODY_SIZE` environment variable)
    - SVG icons: ≤2MB each
    - Total entries (categories + fields): ≤10,000
 

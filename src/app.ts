@@ -4,12 +4,13 @@ import { handleBuildSettingsV1, handleBuildSettingsV2 } from './controllers/sett
 // import { logger } from './middleware/logger'; // Removed logger import
 import { errorHandler } from './middleware/errorHandler';
 import { ValidationError } from './types/errors';
+import { config } from './config/app';
 
 /**
  * Create and configure the Elysia application
  * @returns The configured Elysia application
  */
-const MAX_BODY_SIZE = 1_000_000; // 1MB limit for v2 JSON payloads
+const MAX_BODY_SIZE = config.jsonByteLimit; // Use config value (10MB default, configurable via MAX_JSON_BODY_SIZE env var)
 
 export function createApp() {
   const app = new Elysia()

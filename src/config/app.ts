@@ -7,7 +7,9 @@ export const config = {
   tempDirPrefix: 'comapeo-settings-',
   maxAttempts: 120, // Maximum number of attempts to check for the built file
   delayBetweenAttempts: 1000, // Delay between attempts in milliseconds
-  jsonByteLimit: 1_000_000, // 1 MB limit for JSON payloads
+  jsonByteLimit: process.env.MAX_JSON_BODY_SIZE
+    ? parseInt(process.env.MAX_JSON_BODY_SIZE)
+    : 10_000_000, // 10 MB limit for JSON payloads (configurable via MAX_JSON_BODY_SIZE env var)
   iconByteLimit: 2_000_000, // 2 MB limit for SVG icons
   maxEntries: 10_000, // Safety cap on total entries across payload
   iconFetchTimeoutMs: 5000, // Timeout for fetching remote SVGs
