@@ -39,7 +39,7 @@ describe('API routes', () => {
 
     expect(res.status).toBe(200);
     const buffer = new Uint8Array(await res.arrayBuffer());
-    expect(buffer.toString()).toBe('v1-data');
+    expect(new TextDecoder().decode(buffer)).toBe('v1-data');
   });
 
   it('returns built file from /v2', async () => {
