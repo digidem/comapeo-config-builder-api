@@ -71,6 +71,49 @@ describe('API routes', () => {
     expect(buffer.byteLength).toBeGreaterThan(0); // Expect a non-empty file
   });
 
+  it('adds legacyCompat tag in /v2 output', async () => {
+    const payload = {
+      metadata: { name: 'legacy-test', version: '1.0.0', legacyCompat: true },
+      categories: [
+        {
+          id: 'mahali-pa-kihistoria',
+          name: 'Historic Place',
+          appliesTo: ['observation', 'track'],
+          fields: ['field-1'],
+          track: true,
+        },
+      ],
+      fields: [{ id: 'field-1', name: 'Field', tagKey: 'field-1', type: 'text' }],
+    };
+
+    const res = await app.handle(
+      new Request('http://localhost/v2', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const buffer = Buffer.from(await res.arrayBuffer());
+
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'comapeo-legacy-'));
+    const filePath = path.join(tmpDir, 'out.comapeocat');
+    await fs.writeFile(filePath, buffer);
+
+    const reader = new Reader(filePath);
+    const categories = await reader.categories();
+    const cat = categories.get('mahali-pa-kihistoria');
+
+    expect(cat?.tags).toEqual({
+      categoryId: 'mahali-pa-kihistoria',
+      'mahali-pa-kihistoria': 'yes',
+    });
+
+    await reader.close();
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
   it('returns 422 when comapeocat validation hangs', async () => {
     const payload = {
       metadata: { name: 'timeout-test', version: '1.0.0' },

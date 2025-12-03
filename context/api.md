@@ -102,6 +102,51 @@ curl -X POST \
 
 ---
 
+### 3. Build Configuration (JSON, v2)
+
+#### `POST /v2`
+
+Processes a JSON payload and returns a built `.comapeocat` file using `comapeocat@1.1.0` Writer.
+
+**Content-Type**: `application/json`
+
+**Request Body** (required):
+- `metadata`: `{ name: string; version?: string; description?: string; legacyCompat?: boolean }`
+  - `legacyCompat` (optional): when `true`, every category gets an extra tag keyed by its `id` with value `"yes"` (e.g., `{ "mahali-pa-kihistoria": "yes" }`) in addition to the default `{ categoryId: <id> }` tag to support legacy consumers.
+- `categories`: array of categories with `id`, `name`, `appliesTo` (`observation`/`track`), optional `tags`, `fields`, `iconId`, `addTags`, `removeTags`, `terms`, `color`, `track`.
+- `fields`: array of fields with `id`, `type`, optional `name/label/tagKey/options/...` (legacy types are mapped automatically).
+- `icons` (optional): array with `id` plus either `svgData` or `svgUrl` (data URIs allowed).
+- `translations` (optional): object keyed by BCP‑47 locale.
+
+**Default tags**: If a category provides no `tags`, the service sets `{ categoryId: <id> }`. With `legacyCompat: true`, it also adds `{ <id>: "yes" }`.
+
+**Response**: Binary stream of `.comapeocat` file.
+
+**Status Codes**:
+- `200 OK` - file built and validated
+- `400 Bad Request` - validation errors (e.g., size limits, bad schema, path traversal)
+- `422 Unprocessable Entity` - build produced a file but downstream validation timed out/failed
+
+**Examples**:
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d @config.json \
+  --output output.comapeocat \
+  http://localhost:3000/v2
+```
+
+**Implementation**: `src/controllers/settingsController.ts` (dispatch) and `src/services/comapeocatBuilder.ts` (build logic)
+
+**Key validation/limits** (see `src/config/app.ts`):
+- JSON body ≤ 10 MB (streaming enforced in `app.ts` onParse hook)
+- Icons ≤ 2 MB each, 5s fetch timeout
+- Entries (categories + fields + icons + translations + options) ≤ 10,000
+- Locales must be valid BCP‑47 (normalized); path traversal blocked in metadata name/version
+- Legacy field types mapped to Writer equivalents
+
+---
+
 ## CORS Configuration
 
 The API has CORS enabled for all origins using `@elysiajs/cors`.

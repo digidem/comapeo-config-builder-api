@@ -105,6 +105,8 @@ Example payload:
 }
 ```
 
+Set `metadata.legacyCompat: true` to add a legacy-friendly tag per category. When enabled, each category gets an extra tag keyed by its `id` with value `"yes"`, in addition to the default `{ categoryId: "<id>" }`.
+
 #### Field/type mapping (v2)
 - `select` → `selectOne`
 - `multiselect` → `selectMultiple`
@@ -119,7 +121,7 @@ Example payload:
 - Categories with `track: true` are added to the track list (must not be empty if any track is declared).
 
 #### Limits & validation (v2)
-- JSON body ≤ 1 MB (enforced while streaming parse).
+- JSON body ≤ 10 MB (streaming-validated).
 - SVG icons ≤ 2 MB each; icons can be provided via:
   - `svgData` (inline SVG string)
   - `svgUrl` (remote fetch with 5s timeout and content-type check)
